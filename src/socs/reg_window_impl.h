@@ -148,15 +148,15 @@ public:
                 ReadRegister(addr & ~1u, GuestAccess{addr, 0u, 0u, &kByteAccessNames, lane}) >> shift);
         } else {
             return static_cast<uint8_t>(
-                ReadRegister(addr, GuestAccess{addr, 0u, 0u, &kByteAccessNames, 0xFFFFu, M.reg_bytes != 1u}));
+                ReadRegister(addr, GuestAccess{addr, 0u, 0u, &kByteAccessNames, 0x00FFu, M.reg_bytes != 1u}));
         }
     }
 
     void WriteByte(uint32_t addr, uint8_t v) override {
-        if constexpr (M.byte_lanes) {
+        if constexpr (M.byte_lanes || M.reg_bytes != 1u) {
             WriteLane(addr, v);
         } else {
-            WriteRegister(addr, v, GuestAccess{addr, v, 0u, &kByteAccessNames, 0xFFFFu, M.reg_bytes != 1u});
+            WriteRegister(addr, v, GuestAccess{addr, v, 0u, &kByteAccessNames});
         }
     }
 
@@ -272,21 +272,17 @@ private:
 
     void WriteRegister(uint32_t addr, uint16_t value, GuestAccess guest) {
         std::lock_guard<Lock> lk(lock_);
-        const uint32_t i = RegIndex(addr, guest.names->write, guest);
-        if (guest.low_lane && !M.reg[i].low_lane) {
-            this->HaltUnsupportedAccess(guest.names->write, guest.addr, guest.value);
-        }
-        WriteIndexed(i, M.reg[i].low_lane ? static_cast<uint16_t>(value & 0x00FFu) : value, guest);
+        WriteIndexed(RegIndex(addr, guest.names->write, guest), value, guest);
     }
 
     void WriteLane(uint32_t addr, uint8_t value) {
-        const uint32_t shift = (addr & 1u) * 8u;
-        const uint16_t lane  = static_cast<uint16_t>(0x00FFu << shift);
-        const uint16_t bits  = static_cast<uint16_t>(value << shift);
-        const GuestAccess guest{addr, value, 0u, &kByteAccessNames, lane};
+        const uint32_t    shift = (addr & 1u) * 8u;
+        const uint16_t    lane  = static_cast<uint16_t>(0x00FFu << shift);
+        const uint16_t    bits  = static_cast<uint16_t>(value << shift);
+        const GuestAccess guest{addr, value, 0u, &kByteAccessNames, lane, !M.byte_lanes};
         std::lock_guard<Lock> lk(lock_);
-        const uint32_t i = RegIndex(addr & ~1u, guest.names->write, guest);
-        if (M.reg[i].write == WriteKind::kHooked) this->HaltUnsupportedAccess(guest.names->write, addr, value);
+        const uint32_t i = RegIndex(M.byte_lanes ? addr & ~1u : addr, guest.names->write, guest);
+        if (guest.low_lane && !M.reg[i].low_lane) this->HaltUnsupportedAccess(guest.names->write, addr, value);
         WriteIndexed(i, M.reg[i].write == WriteKind::kStored ? static_cast<uint16_t>((reg_[i] & ~lane) | bits) : bits,
                      guest);
     }

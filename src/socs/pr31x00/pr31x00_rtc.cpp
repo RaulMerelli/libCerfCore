@@ -32,7 +32,8 @@ constexpr uint32_t kOffPeriodic = 0x14u;   /* $154                        */
 /* The RTC counter is 40 bits wide (§15.4.1) and is clocked by the 32 kHz input
    pin (§15.4.3 ENTESTCLK). 2^40 / 32768 Hz = 388.4 days, which is the rollover
    period §15.4.3 ENRTCTST quotes as "388 days". */
-constexpr uint64_t kMask40 = 0xFFFFFFFFFFull;
+constexpr uint32_t kRtcBits = 40u;
+constexpr uint64_t kMask40 = (uint64_t{1} << kRtcBits) - 1u;
 constexpr uint64_t kRtcClkHz = 32768u;
 constexpr uint32_t kRippleStageBits = 8u;
 
@@ -88,8 +89,8 @@ void Pr31x00Rtc::OnReady() {
         if (moved) NotifyCountListeners();
     });
     osc_.Attach(kRtcClkHz, 1u);
-    anchor_tick_ = osc_.Now();
-    seen_tick_   = anchor_tick_;
+    seen_tick_ = osc_.Now();
+    count_.Anchor(seen_tick_, 0u);
     rtc_event_   = cycle_clock_->Add([this] {
         std::lock_guard<std::mutex> lk(mtx_);
         RtcEvaluateLocked();
@@ -194,21 +195,19 @@ void Pr31x00Rtc::PerRetimeLocked() {
    $0000000000 until it is cleared (§15.4.3 p15-6). */
 uint64_t Pr31x00Rtc::CountAtTickLocked(uint64_t tick) const {
     if (rtc_clr_) return 0u;
-    return (count_base_ + (tick - anchor_tick_)) & kMask40;
+    return count_.CountAt(tick) & kMask40;
 }
 
 /* Figure 15.2.1 p15-2: TC0 of the first 8-bit ripple counter carries into the second. */
 uint64_t Pr31x00Rtc::Tc0CarriesAtTickLocked(uint64_t tick) const {
     if (rtc_clr_) return carries_base_;
-    return carries_base_ + ((count_base_ + (tick - anchor_tick_)) >> kRippleStageBits) -
-           (count_base_ >> kRippleStageBits);
+    return carries_base_ + (count_.CountAt(tick) >> kRippleStageBits) - (count_.AnchorCount() >> kRippleStageBits);
 }
 
 /* Figure 15.2.1 p15-2: the 40-bit equality comparator and the TC0-TC4 AND clock the ALARMINT and
    RTCINT flip-flops. */
 uint64_t Pr31x00Rtc::NextRiseTickLocked(uint64_t tick, uint64_t value) const {
-    const uint64_t ahead = (value - CountAtTickLocked(tick)) & kMask40;
-    return tick + (ahead != 0u ? ahead : kMask40 + 1u);
+    return count_.NextMatchCycle<kRtcBits>(value, tick);
 }
 
 uint32_t Pr31x00Rtc::RtcRisesLocked(uint64_t from, uint64_t to) const {
@@ -255,9 +254,8 @@ void Pr31x00Rtc::SetRtcClrLocked(bool clr) {
         rtc_clr_ = true;
         if (!was_equal && alarm_armed_ && alarm_ == 0u) intc_->SetPending(kStatusSet, kAlarmInt);
     } else {
-        rtc_clr_     = false;
-        count_base_  = 0u;
-        anchor_tick_ = seen_tick_;
+        rtc_clr_ = false;
+        count_.Anchor(seen_tick_, 0u);
     }
     RtcArmLocked();
 }
@@ -298,18 +296,18 @@ std::optional<uint64_t> Pr31x00Rtc::CycleOfTc0Carry(uint64_t n) {
                               static_cast<unsigned long long>(n),
                               static_cast<unsigned long long>(done));
     }
-    const uint64_t stage = count_base_ >> kRippleStageBits;
+    const uint64_t stage = count_.AnchorCount() >> kRippleStageBits;
     const uint64_t more  = n - carries_base_;
     if (more > (UINT64_MAX >> kRippleStageBits) - stage) {
         emu_.Get<Fatal>().Die("Pr31x00Rtc: TC0 carry %llu overflows the crystal tick count",
                               static_cast<unsigned long long>(n));
     }
-    const uint64_t ahead = ((stage + more) << kRippleStageBits) - count_base_;
-    if (ahead > UINT64_MAX - anchor_tick_) {
+    const uint64_t ahead = ((stage + more) << kRippleStageBits) - count_.AnchorCount();
+    if (ahead > UINT64_MAX - count_.AnchorCycle()) {
         emu_.Get<Fatal>().Die("Pr31x00Rtc: TC0 carry %llu overflows the crystal tick count",
                               static_cast<unsigned long long>(n));
     }
-    return osc_.CycleOf(anchor_tick_ + ahead);
+    return osc_.CycleOf(count_.CycleOfTick(ahead));
 }
 
 void Pr31x00Rtc::RegisterCountListener(std::function<void()> fn) {
@@ -425,7 +423,8 @@ void Pr31x00Rtc::SaveState(StateWriter& w) {
 void Pr31x00Rtc::RestoreState(StateReader& r) {
     std::lock_guard<std::mutex> lk(mtx_);
     osc_.Restore(r);
-    r.Read("count", count_base_);
+    uint64_t count = 0u;
+    r.Read("count", count);
     r.Read("tc0_carries", carries_base_);
     r.Read("rtc_rises", rises_pending_);
     r.Read("alarm", alarm_);
@@ -438,8 +437,8 @@ void Pr31x00Rtc::RestoreState(StateReader& r) {
     r.Read("per_elapsed", per_held_);
     r.Read("per_int_done", per_int_done_);
     per_running_ = false;
-    anchor_tick_ = osc_.Now();
-    seen_tick_   = anchor_tick_;
+    seen_tick_   = osc_.Now();
+    count_.Anchor(seen_tick_, count);
 }
 
 void Pr31x00Rtc::PostRestore() {

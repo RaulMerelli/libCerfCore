@@ -45,7 +45,7 @@ void Sh77xxCmt::OnReady() {
 
 bool Sh77xxCmt::ClockRuns() const { return (cmstr_ & kCmstrStr0) != 0u && !dmac_->ClockStopped(); }
 
-uint64_t Sh77xxCmt::Ticks() const { return pclk_.Ticks() >> kCksShift[cmcsr_ & kCmcsrCks]; }
+uint64_t Sh77xxCmt::Ticks() const { return pclk_.DividedTicks(kCksShift[cmcsr_ & kCmcsrCks]); }
 
 uint64_t Sh77xxCmt::FirstMatch(uint16_t count) const {
     if (count <= cmcor_) return static_cast<uint64_t>(cmcor_ - count) + 1u;
@@ -54,7 +54,7 @@ uint64_t Sh77xxCmt::FirstMatch(uint16_t count) const {
 
 uint16_t Sh77xxCmt::Count() const {
     if (!counting_) return held_count_;
-    return static_cast<uint16_t>(anchor_count_ + (Ticks() - anchor_tick_));
+    return static_cast<uint16_t>(counter_.CountAt(Ticks()));
 }
 
 void Sh77xxCmt::Sync() {
@@ -62,18 +62,16 @@ void Sh77xxCmt::Sync() {
     const uint64_t now = Ticks();
     if (now < next_match_) return;
     const uint64_t period = static_cast<uint64_t>(cmcor_) + 1u;
-    anchor_tick_          = next_match_ + (now - next_match_) / period * period;
-    anchor_count_         = 0u;
-    next_match_           = anchor_tick_ + period;
+    counter_.Anchor(next_match_ + (now - next_match_) / period * period, 0u);
+    next_match_ = counter_.CycleOfTick(period);
     cmcsr_ |= kCmcsrCmf;
     Arm();
     dmac_->Request(Sh77xxDmaRequest::kCmt);
 }
 
 void Sh77xxCmt::Anchor(uint16_t count) {
-    anchor_tick_  = Ticks();
-    anchor_count_ = count;
-    next_match_   = anchor_tick_ + FirstMatch(count);
+    counter_.Anchor(Ticks(), count);
+    next_match_ = counter_.CycleOfTick(FirstMatch(count));
 }
 
 void Sh77xxCmt::Arm() {
@@ -81,7 +79,7 @@ void Sh77xxCmt::Arm() {
         clock_->Disarm(event_);
         return;
     }
-    clock_->Arm(event_, pclk_.CycleOfTick(next_match_ << kCksShift[cmcsr_ & kCmcsrCks]));
+    clock_->Arm(event_, pclk_.CycleOfDividedTick(next_match_, kCksShift[cmcsr_ & kCmcsrCks]));
 }
 
 void Sh77xxCmt::UpdateCounting() {
@@ -197,9 +195,8 @@ void Sh77xxCmt::RestoreState(StateReader& r) {
 void Sh77xxCmt::PostRestore() {
     pclk_.PostRestore();
     if (counting_) {
-        anchor_tick_  = Ticks();
-        anchor_count_ = held_count_;
-        next_match_   = anchor_tick_ + restored_ticks_to_match_;
+        counter_.Anchor(Ticks(), held_count_);
+        next_match_ = counter_.CycleOfTick(restored_ticks_to_match_);
     }
     Arm();
 }

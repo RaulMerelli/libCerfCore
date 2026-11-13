@@ -9,7 +9,8 @@ constexpr uint16_t kSh7709ControlReset[kSh77xxPortCount] = {
     0x0000u, 0x0000u, 0xAAAAu, 0xAA8Au, 0xAAAAu, 0xAAAAu, 0xAAAAu, 0xAAAAu, 0x0000u, 0x0000u, 0x0000u, 0xA888u,
 };
 
-constexpr cerf_reg_window_detail::RegWindowModel kSh7709PfcControl = sh77xx_pfc::ControlWindow(kSh7709ControlReset);
+constexpr cerf_reg_window_detail::RegWindowModel kSh7709PfcControl =
+    sh77xx_pfc::ControlWindow(kSh7709ControlReset, 1u << kSh77xxPortG);
 
 class Sh7709Pfc : public sh77xx_pfc::Sh77xxPfcBase<SocId::Sh7709, kSh7709PfcControl> {
 public:

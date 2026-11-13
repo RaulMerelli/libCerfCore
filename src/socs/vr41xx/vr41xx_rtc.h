@@ -2,6 +2,7 @@
 
 #include "../../execution/guest_cycle_clock.h"
 #include <cerfcore/peripherals/peripheral_base.h>
+#include "../cycle_anchored_counter.h"
 #include "vr41xx_rtc_latch.h"
 #include "vr41xx_rtcl_rephase.h"
 #include "vr41xx_rtcx_ticks.h"
@@ -86,9 +87,8 @@ private:
     MipsCoreClock*          core_clock_ = nullptr;
     cerfengine::MipsInterruptChannel*   channel_    = nullptr;
     Vr41xxRtcxTicks         rtcx_{emu_, Vr41xxRtcxDomain::RtcIcuPmu};
+    WideTickAnchoredCounter etime_;
 
-    uint64_t etime_base_   = 0;
-    uint64_t etime_anchor_ = 0;
     uint64_t ecmp_         = 0;
     bool     ecmp_armed_   = false;
     uint64_t ecmp_match_   = 0;

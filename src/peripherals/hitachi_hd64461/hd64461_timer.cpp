@@ -72,11 +72,9 @@ void Hd64461Timer::OnReady() {
     }
     clock_->RegisterRateListener([this] { Retime(); });
     GuestCpuReset& reset = emu_.Get<GuestCpuReset>();
-    reset.RegisterResetListener([this](ResetLineKind kind) {
-        if (kind == ResetLineKind::Rtc) PowerOnReset();
-    });
+    reset.RegisterResetListener([this](ResetLineKind) { ResetChannels(); });
     reset.RegisterResetReleaseListener([this] { OnModuleClockChanged(); });
-    PowerOnReset();
+    ResetChannels();
     OnModuleClockChanged();
     emu_.Get<PeripheralDispatcher>().Register(this);
 }
@@ -262,7 +260,7 @@ void Hd64461Timer::OnModuleClockChanged() {
     for (Channel& ch : ch_) SetClocked(ch, system_->TimerClockRunning(Index(ch)));
 }
 
-void Hd64461Timer::PowerOnReset() {
+void Hd64461Timer::ResetChannels() {
     for (Channel& ch : ch_) {
         ch.counter.PowerOnReset(kPowerOnConstant);
         ch.control = 0u;

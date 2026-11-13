@@ -7,6 +7,7 @@
 
 #include "../../socs/reg_window_impl.h"
 #include "../pin_drive.h"
+#include "hd64461_pcc.h"
 #include <cerfcore/core/callback_list.h>
 
 namespace cerfcore {
@@ -30,12 +31,12 @@ constexpr uint32_t kPins      = 8u;
 constexpr uint32_t kDataIndex = 8u;
 
 constexpr RegSpec Control() {
-    return RegSpec{ReadKind::kStored, WriteKind::kStored, 0xFFFFu, 0xAAAAu, 0x0000u, OtherReset::kRetain,
+    return RegSpec{ReadKind::kStored, WriteKind::kStored, 0xFFFFu, 0xAAAAu, 0x0000u, OtherReset::kReset,
                    0x0000u, 0x0000u};
 }
 
 constexpr RegSpec Data() {
-    return RegSpec{ReadKind::kSampled, WriteKind::kStored, 0x00FFu, 0x0000u, 0x0000u, OtherReset::kRetain,
+    return RegSpec{ReadKind::kSampled, WriteKind::kStored, 0x00FFu, 0x0000u, 0x0000u, OtherReset::kReset,
                    0x0000u, 0x0000u, true};
 }
 
@@ -69,10 +70,12 @@ public:
     void RestoreState(StateReader& r) override;
     void PostRestore() override;
 
-    uint32_t PinMode(uint32_t port, uint32_t pin) const;
-    PinDrive Drive(uint32_t port, uint32_t pin) const;
-    bool     Pcmcia1PinsConnected() const;
-    void     AddPinListener(std::function<void()> listener);
+    uint32_t               PinMode(uint32_t port, uint32_t pin) const;
+    Hd64461Pcc::SocketPins Pcmcia1Presented(const Hd64461Pcc::SocketPins& live) const;
+    PinDrive               Drive(uint32_t port, uint32_t pin) const;
+    bool                   Pcmcia1PinsConnected() const;
+    void                   GateInputs(uint32_t gated_ports, const Hd64461Pcc::SocketPins& pcc1);
+    void                   AddPinListener(std::function<void()> listener);
 
 protected:
     uint16_t SampleRegister(uint32_t i, uint32_t addr) override;
@@ -83,12 +86,15 @@ protected:
 private:
     uint8_t ModePins(uint16_t control, uint32_t mode) const;
     uint8_t Pcmcia1Inputs(uint32_t port) const;
-    uint8_t Pcmcia1InputLevels(uint32_t port);
+    uint8_t Pcmcia1InputLevels(uint32_t port, const Hd64461Pcc::SocketPins& pcc1) const;
+    uint8_t InputLevels(uint32_t port, const Hd64461Pcc::SocketPins& pcc1) const;
+    uint8_t PresentedLevels(uint32_t port);
     void    PublishLocked();
     void    NotifyListeners();
 
     Hd64461GpioWiring*                 wiring_ = nullptr;
     std::atomic<uint32_t>              pins_[cerf_hd64461_gpio_detail::kPorts]{};
+    std::atomic<uint64_t>              gate_{0u};
     CallbackList<>                     listeners_;
 };
 

@@ -27,9 +27,9 @@ inline constexpr cerf_reg_window_detail::RegWindowModel kHd64461IntcModel = {
     false,
     {
         {cerf_reg_window_detail::ReadKind::kSampled, cerf_reg_window_detail::WriteKind::kFatal, 0x0000u, 0x0000u,
-         0x0000u, cerf_reg_window_detail::OtherReset::kRetain, 0x0000u},
+         0x0000u, cerf_reg_window_detail::OtherReset::kReset, 0x0000u},
         {cerf_reg_window_detail::ReadKind::kStored, cerf_reg_window_detail::WriteKind::kStored, 0xFFFFu, 0x0000u,
-         0x0000u, cerf_reg_window_detail::OtherReset::kRetain, 0x0000u},
+         0x0000u, cerf_reg_window_detail::OtherReset::kReset, 0x0000u},
     },
 };
 

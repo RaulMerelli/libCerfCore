@@ -67,8 +67,7 @@ void Hd64461Lcdc::OnReady() {
     memory.AddRegion(kVramPa, kDisplayMemoryBytes, MemoryKind::kRam);
     vram_ = memory.TryTranslate(kVramPa);
     RegWindow::OnReady();
-    emu_.Get<GuestCpuReset>().RegisterResetListener([this](ResetLineKind kind) {
-        if (kind != ResetLineKind::Rtc) return;
+    emu_.Get<GuestCpuReset>().RegisterResetListener([this](ResetLineKind) {
         std::lock_guard<std::mutex> lk(lock_);
         write_index_  = 0u;
         write_phase_  = 0u;

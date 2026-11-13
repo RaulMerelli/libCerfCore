@@ -3,6 +3,7 @@
 #include <cerfcore/peripherals/peripheral_base.h>
 
 #include "../../execution/guest_cycle_clock.h"
+#include "../cycle_anchored_counter.h"
 #include "sh77xx_dmac.h"
 #include "sh77xx_peripheral_clock_ticks.h"
 #include "sh77xx_standby_control.h"
@@ -46,9 +47,8 @@ private:
     uint16_t                   cmstr_        = 0u;
     uint16_t                   cmcsr_        = 0u;
     uint16_t                   cmcor_        = 0xFFFFu;
+    TickAnchoredCounter        counter_;
     uint16_t                   held_count_   = 0u;
-    uint16_t                   anchor_count_ = 0u;
-    uint64_t                   anchor_tick_  = 0u;
     uint64_t                   next_match_   = 0u;
     uint64_t                   restored_ticks_to_match_ = 0u;
     bool                       counting_     = false;

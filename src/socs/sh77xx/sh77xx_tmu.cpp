@@ -88,7 +88,7 @@ bool Sh77xxTmu::Rtcclk(const Channel& ch) const { return (ch.control & kTcrTpsc)
 
 uint64_t Sh77xxTmu::Ticks(const Channel& ch) {
     if (Rtcclk(ch)) return rtc_->RtcclkTicks();
-    return pclk_.Ticks() >> PclkShift(ch.control);
+    return pclk_.DividedTicks(PclkShift(ch.control));
 }
 
 void Sh77xxTmu::Arm(Channel& ch) {
@@ -100,7 +100,7 @@ void Sh77xxTmu::Arm(Channel& ch) {
         rtc_->ArmAtRtcclk(ch.event, ch.counter.NextFlag());
         return;
     }
-    clock_->Arm(ch.event, pclk_.CycleOfTick(ch.counter.NextFlag() << PclkShift(ch.control)));
+    clock_->Arm(ch.event, pclk_.CycleOfDividedTick(ch.counter.NextFlag(), PclkShift(ch.control)));
 }
 
 void Sh77xxTmu::Drive(Channel& ch) {
@@ -275,11 +275,6 @@ int64_t Sh77xxTmu::ParkWakeDueNs() {
 
 void Sh77xxTmu::OnStandbyControlChange(uint8_t from, uint8_t to) {
     if ((from & kStbcrMstp2) != 0u || (to & kStbcrMstp2) == 0u) return;
-    for (const Channel& ch : ch_) {
-        if (Rtcclk(ch) && ch.counter.Running()) {
-            emu_.Get<Fatal>().Die("Sh77xxTmu: STBCR MSTP2 set while channel %u counts RTCCLK", Index(ch));
-        }
-    }
     StopPeripheralClockChannels();
 }
 

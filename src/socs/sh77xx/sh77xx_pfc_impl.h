@@ -19,10 +19,11 @@ using cerf_reg_window_detail::WriteKind;
 
 inline constexpr uint32_t kControlBase = 0x04000100u;
 
-constexpr RegWindowModel ControlWindow(const uint16_t (&reset)[kSh77xxPortCount]) {
+constexpr RegWindowModel ControlWindow(const uint16_t (&reset)[kSh77xxPortCount], uint32_t low_lane_ports) {
     RegWindowModel w{kControlBase, kSh77xxPortCount * 2u, kSh77xxPortCount, false, {}, 2u};
     for (uint32_t i = 0; i < kSh77xxPortCount; ++i) {
         w.reg[i] = RegSpec{ReadKind::kStored, WriteKind::kStored, 0xFFFFu, reset[i], 0u, OtherReset::kRetain};
+        w.reg[i].low_lane = ((low_lane_ports >> i) & 1u) != 0u;
     }
     return w;
 }

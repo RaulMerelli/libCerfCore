@@ -4,7 +4,9 @@
 #include <cerfcore/core/cerf_emulator.h>
 #include <cerfcore/core/fatal.h>
 #include "../../boards/hp_600/hp_600_family_id.h"
+#include "hd64461_gpio.h"
 #include "hd64461_lcdc.h"
+#include "hd64461_pcc.h"
 #include "hd64461_socket_wiring.h"
 #include "hd64461_timer.h"
 
@@ -14,8 +16,12 @@ REGISTER_SERVICE(Hd64461SystemControl);
 
 namespace {
 
-constexpr uint32_t kStbcr = 0u;
-constexpr uint32_t kSyscr = 1u;
+constexpr uint32_t kStbcr  = 0u;
+constexpr uint32_t kSyscr  = 1u;
+constexpr uint32_t kScpucr = 2u;
+
+constexpr uint16_t kCkioStby    = 0x2000u;
+constexpr uint16_t kCkioModules = 0x19FFu;
 
 constexpr uint16_t kSlckeIst   = 0x0800u;
 constexpr uint16_t kSlckeOst   = 0x0200u;
@@ -30,6 +36,16 @@ constexpr uint16_t kTimerClock = kStm0st | kStm1st;
 constexpr uint16_t kSptaIr = 0x0080u;
 constexpr uint16_t kSptaTm = 0x0040u;
 constexpr uint16_t kSptbUr = 0x0020u;
+
+constexpr uint32_t kGatingBit0 = 8u;
+
+uint32_t GatedPorts(uint16_t scpucr) {
+    uint32_t ports = 0u;
+    for (uint32_t port = 0; port < cerf_hd64461_gpio_detail::kPorts; ++port) {
+        if (((scpucr >> (kGatingBit0 + 2u * port)) & 1u) != 0u) ports |= 1u << port;
+    }
+    return ports;
+}
 
 }
 
@@ -75,11 +91,15 @@ void Hd64461SystemControl::BeforeStore(uint32_t i, uint16_t value) {
     if (i == kSyscr && (value & (kSptaIr | kSptbUr)) == (kSptaIr | kSptbUr)) {
         emu_.Get<Fatal>().Die("Hd64461SystemControl: SYSCR write 0x%04X selects UART and IrDA together", value);
     }
+    if (i == kStbcr && (value & kCkioStby) != 0u && (value & kCkioModules) != kCkioModules) {
+        emu_.Get<Fatal>().Die("Hd64461SystemControl: STBCR write 0x%04X gates CKIO while a module runs", value);
+    }
 }
 
 void Hd64461SystemControl::AfterStore(uint32_t i) {
     const uint16_t before = stbcr_.load(std::memory_order_relaxed);
     PublishLocked();
+    if (i == kScpucr) emu_.Get<Hd64461Pcc>().ApplyInputGating(GatedPorts(StoredReg(kScpucr)));
     if (i != kStbcr) return;
     if (((before ^ StoredReg(kStbcr)) & kLcdcClock) != 0u) emu_.Get<Hd64461Lcdc>().OnModuleClockChanged();
     if (((before ^ StoredReg(kStbcr)) & kTimerClock) != 0u) emu_.Get<Hd64461Timer>().OnModuleClockChanged();

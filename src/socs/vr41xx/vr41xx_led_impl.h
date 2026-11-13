@@ -14,6 +14,7 @@
 #include "../../peripherals/peripheral_dispatcher.h"
 #include <cerfcore/state/state_stream.h>
 #include <cerfcore/socs/guest_cpu_reset.h>
+#include "../cycle_anchored_counter.h"
 #include "vr41xx_icu.h"
 #include "vr41xx_led_second_element.h"
 #include "vr41xx_rtcx_ticks.h"
@@ -118,7 +119,7 @@ public:
             rtcx_.Rescale();
             ArmAutoStopLocked();
         });
-        blink_anchor_tick_ = rtcx_.Now();
+        blink_.Anchor(rtcx_.Now(), 0u);
         second_ = emu_.TryGet<Vr41xxLedSecondElement>();
         emu_.Get<PeripheralDispatcher>().Register(this);
         emu_.Get<HostWidgetRegistry>().Register(this);
@@ -268,13 +269,8 @@ private:
         return {AddChannel(kClrLit.r, second.r), AddChannel(kClrLit.g, second.g), AddChannel(kClrLit.b, second.b)};
     }
 
-    uint64_t BlinkTicksLocked() {
-        return blink_base_ + (rtcx_.Now() - blink_anchor_tick_);
-    }
-    void ReanchorBlinkLocked(uint64_t elapsed) {
-        blink_base_        = elapsed;
-        blink_anchor_tick_ = rtcx_.Now();
-    }
+    uint64_t BlinkTicksLocked() { return blink_.CountAt(rtcx_.Now()); }
+    void     ReanchorBlinkLocked(uint64_t elapsed) { blink_.Anchor(rtcx_.Now(), elapsed); }
 
     uint64_t PairIndexAt(uint64_t elapsed) const {
         return (elapsed >> kHltcUnitShift) / (hts_ + lts_);
@@ -298,7 +294,7 @@ private:
         }
         const uint64_t period = static_cast<uint64_t>(hts_) + lts_;
         const uint64_t stop   = (last_pair_index_ + astc_remaining_) * period;
-        rtcx_.ArmAt(event_, blink_anchor_tick_ + ((stop << kHltcUnitShift) - blink_base_));
+        rtcx_.ArmAt(event_, blink_.CycleOfTick((stop << kHltcUnitShift) - blink_.AnchorCount()));
     }
 
     void UpdateLocked() {
@@ -386,15 +382,13 @@ private:
     uint16_t astc_  = kAstcPowerOn;
     uint16_t int_   = 0;
 
-    uint64_t blink_base_ = 0;
-
     uint64_t last_pair_index_ = 0;
     uint16_t astc_remaining_  = 0;
 
     GuestCycleClock*        clock_            = nullptr;
     GuestCycleClock::Event* event_            = nullptr;
     Vr41xxRtcxTicks         rtcx_{emu_, kClock};
-    uint64_t                blink_anchor_tick_ = 0;
+    WideTickAnchoredCounter blink_;
 
     Vr41xxLedSecondElement* second_ = nullptr;
 

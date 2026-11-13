@@ -81,9 +81,8 @@ private:
     bool     per_int_done_     = false;
 
     OscillatorTicks         osc_{emu_, true};
-    uint64_t                count_base_  = 0;
+    WideTickAnchoredCounter count_;
     uint64_t                carries_base_ = 0;
-    uint64_t                anchor_tick_ = 0;
     uint64_t                seen_tick_   = 0;
     uint32_t                rises_pending_ = 0;
     GuestCycleClock::Event* rtc_event_   = nullptr;

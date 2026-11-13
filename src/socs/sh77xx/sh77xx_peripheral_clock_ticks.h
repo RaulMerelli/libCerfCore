@@ -20,15 +20,17 @@ public:
     explicit Sh77xxPeripheralClockTicks(CerfEmulator& emu) : emu_(emu), ticks_(emu) {}
 
     void     Attach(std::function<void()> on_retime);
-    uint64_t Ticks() const;
-    uint64_t CycleOfTick(uint64_t tick) const;
+    uint64_t DividedTicks(uint32_t shift) const;
+    uint64_t CycleOfDividedTick(uint64_t tick, uint32_t shift) const;
 
     void Save(StateWriter& w) const;
     void Restore(StateReader& r);
     void PostRestore();
 
 private:
-    void Retime();
+    uint64_t Ticks() const;
+    uint64_t CycleOfTick(uint64_t tick) const;
+    void     Retime();
 
     CerfEmulator&         emu_;
     GuestCycleClock*      clock_ = nullptr;

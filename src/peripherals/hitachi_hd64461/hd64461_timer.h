@@ -61,7 +61,7 @@ private:
     uint16_t ReadMasks() const;
     void     WriteMasks(uint16_t value);
     void     SetClocked(Channel& ch, bool clocked);
-    void     PowerOnReset();
+    void     ResetChannels();
     void     Retime();
 
     GuestCycleClock*      clock_   = nullptr;

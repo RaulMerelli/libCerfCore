@@ -121,8 +121,7 @@ uint64_t Vr41xxRtc::TclkTicksLocked() const {
 /* Every RTC register's RTCRST column is 0 (UM 16.2.1-16.2.9). */
 void Vr41xxRtc::ApplyRtcResetLocked() {
     const uint64_t now = RtcTicksLocked();
-    etime_base_   = 0;
-    etime_anchor_ = now;
+    etime_.Anchor(now, 0u);
     ecmp_         = 0;
     ecmp_armed_   = false;
     rtcl1_reload_ = 0; rtcl2_reload_ = 0;
@@ -160,7 +159,7 @@ void Vr41xxRtc::AckIntBitsLocked(uint16_t clr) {
 }
 
 uint64_t Vr41xxRtc::ReadEtimeLocked() {
-    return (etime_base_ + (RtcTicksLocked() - etime_anchor_)) & kMask48;
+    return etime_.CountAt(RtcTicksLocked()) & kMask48;
 }
 
 uint32_t Vr41xxRtc::DownCount(uint32_t reload, uint64_t elapsed, uint32_t mask) {
@@ -177,7 +176,7 @@ uint64_t Vr41xxRtc::PeriodsReached(uint32_t reload, uint64_t elapsed) {
    interrupt) occurs (and the count-up continues)" (VR4131 UM 13.2.1 p239, VR4121 UM 17.2.1). */
 void Vr41xxRtc::ArmEcmpLocked() {
     const uint64_t now = RtcTicksLocked();
-    const uint64_t etime = (etime_base_ + (now - etime_anchor_)) & kMask48;
+    const uint64_t etime = etime_.CountAt(now) & kMask48;
     ecmp_match_ = now + ((ecmp_ - etime) & kMask48);
 }
 
@@ -257,8 +256,7 @@ uint16_t Vr41xxRtc::RtclCntHalfLocked(int ch, bool high) {
 
 void Vr41xxRtc::WriteEtimeHalfLocked(uint32_t half, uint16_t value) {
     if (!etime_latch_.Write(half, value)) return;
-    etime_base_   = etime_latch_.Value();
-    etime_anchor_ = RtcTicksLocked();
+    etime_.Anchor(RtcTicksLocked(), etime_latch_.Value());
     if (ecmp_armed_) ArmEcmpLocked();
 }
 
@@ -434,8 +432,7 @@ void Vr41xxRtc::RestoreState(StateReader& r) {
     rtcx_.Rebase();
     const uint64_t now = RtcTicksLocked();
 
-    etime_base_   = etime;
-    etime_anchor_ = now;
+    etime_.Anchor(now, etime);
     if (ecmp_armed_) ArmEcmpLocked();
     rtcl1_anchor_      = now - rtcl1_pos;
     rtcl2_anchor_      = now - rtcl2_pos;

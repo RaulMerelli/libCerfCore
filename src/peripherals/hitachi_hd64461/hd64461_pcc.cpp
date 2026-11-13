@@ -98,15 +98,27 @@ void Hd64461Pcc::OnReady() {
     }
     RegWindow::OnReady();
     ApplySocketDrive();
-    auto& reset = emu_.Get<GuestCpuReset>();
-    reset.RegisterResetListener([this](ResetLineKind) {
+    {
         std::lock_guard<std::mutex> lk(lock_);
-        for (uint32_t ch = 0; ch < kChannels; ++ch) ready_pin_high_[ch] = ReadyPinHighLocked(ch);
+        for (uint32_t ch = 0; ch < kChannels; ++ch) card_detect_seen_[ch] = slots_[ch]->HasCard();
+    }
+    auto& reset = emu_.Get<GuestCpuReset>();
+    reset.RegisterResetListener([this](ResetLineKind kind) {
+        if (kind != ResetLineKind::Rtc) return;
+        std::lock_guard<std::mutex> lk(lock_);
+        for (uint32_t ch = 0; ch < kChannels; ++ch) {
+            ready_pin_high_[ch]   = ReadyPinHighLocked(ch);
+            card_detect_seen_[ch] = slots_[ch]->HasCard();
+        }
     });
     reset.RegisterResetReleaseListener([this] {
         ApplySocketDrive();
         std::lock_guard<std::mutex> lk(lock_);
-        for (uint32_t ch = 0; ch < kChannels; ++ch) UpdateRequestLocked(ch);
+        for (uint32_t ch = 0; ch < kChannels; ++ch) {
+            SyncCardDetectLocked(ch);
+            TrackReadyPinLocked(ch);
+            UpdateRequestLocked(ch);
+        }
     });
 }
 
@@ -163,8 +175,12 @@ Hd64461Pcc::SocketPins Hd64461Pcc::Pins(uint32_t ch) {
     return PinsLocked(ch);
 }
 
+Hd64461Pcc::SocketPins Hd64461Pcc::PresentedPinsLocked(uint32_t ch) const {
+    return ch == 1u ? gpio_->Pcmcia1Presented(PinsLocked(ch)) : PinsLocked(ch);
+}
+
 uint16_t Hd64461Pcc::InterfaceStatusLocked(uint32_t ch) const {
-    const SocketPins p = PinsLocked(ch);
+    const SocketPins p = PresentedPinsLocked(ch);
     uint16_t         v = 0u;
     if (p.ready) v |= kIsrReady;
     if (p.write_protect) v |= kIsrWriteProtect;
@@ -196,13 +212,28 @@ bool Hd64461Pcc::RequestLocked(uint32_t ch) const {
     return IoInterfaceLocked(ch) && IreqModeLocked() != kIreqNone && (status & kCscrIreq) != 0u;
 }
 
+void Hd64461Pcc::ApplyInputGating(uint32_t gated_ports) {
+    std::lock_guard<std::mutex> lk(lock_);
+    gpio_->GateInputs(gated_ports, PinsLocked(1u));
+    SyncCardDetectLocked(1u);
+    TrackReadyPinLocked(1u);
+    UpdateRequestLocked(1u);
+}
+
 void Hd64461Pcc::LatchLocked(uint32_t ch, uint16_t bits) {
     const uint32_t i = ch * kChannelRegs + kCscr;
     SetStoredReg(i, static_cast<uint16_t>(StoredReg(i) | bits));
 }
 
+void Hd64461Pcc::SyncCardDetectLocked(uint32_t ch) {
+    const bool card = !PresentedPinsLocked(ch).cd1;
+    if (card == card_detect_seen_[ch]) return;
+    card_detect_seen_[ch] = card;
+    LatchLocked(ch, kCscrDetectChange);
+}
+
 void Hd64461Pcc::TrackReadyPinLocked(uint32_t ch) {
-    const bool high = ReadyPinHighLocked(ch);
+    const bool high = PresentedPinsLocked(ch).ready;
     if (high == ready_pin_high_[ch]) return;
     ready_pin_high_[ch] = high;
     if (!IoInterfaceLocked(ch)) {
@@ -311,7 +342,7 @@ Hd64461Pcc::CardCycle Hd64461Pcc::DecodeCycle(uint32_t area, uint32_t offset, bo
 void Hd64461Pcc::OnCardDetectChanged(PcmciaSlot& slot) {
     const uint32_t              ch = ChannelOf(slot);
     std::lock_guard<std::mutex> lk(lock_);
-    LatchLocked(ch, kCscrDetectChange);
+    SyncCardDetectLocked(ch);
     TrackReadyPinLocked(ch);
     UpdateRequestLocked(ch);
 }
@@ -342,6 +373,7 @@ void Hd64461Pcc::SaveState(StateWriter& w) {
         for (uint32_t ch = 0; ch < kChannels; ++ch) {
             w.Write<uint8_t>("ready_ireq_low", ready_ireq_low_[ch] ? 1u : 0u);
             w.Write<uint8_t>("ready_pin_high", ready_pin_high_[ch] ? 1u : 0u);
+            w.Write<uint8_t>("card_detect_seen", card_detect_seen_[ch] ? 1u : 0u);
         }
     }
     for (uint32_t ch = 0; ch < kChannels; ++ch) {
@@ -358,10 +390,13 @@ void Hd64461Pcc::RestoreState(StateReader& r) {
         for (uint32_t ch = 0; ch < kChannels; ++ch) {
             uint8_t low  = 0u;
             uint8_t high = 0u;
+            uint8_t card = 0u;
             r.Read("ready_ireq_low", low);
             r.Read("ready_pin_high", high);
-            ready_ireq_low_[ch] = low != 0u;
-            ready_pin_high_[ch] = high != 0u;
+            r.Read("card_detect_seen", card);
+            ready_ireq_low_[ch]   = low != 0u;
+            ready_pin_high_[ch]   = high != 0u;
+            card_detect_seen_[ch] = card != 0u;
         }
     }
     for (uint32_t ch = 0; ch < kChannels; ++ch) {

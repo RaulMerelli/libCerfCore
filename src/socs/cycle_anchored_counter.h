@@ -94,7 +94,13 @@ private:
     uint64_t tk_  = 1;
 };
 
-template <class Units>
+class IdentityCounterUnits {
+public:
+    uint64_t Ticks(uint64_t span) const { return span; }
+    uint64_t CyclesCeil(uint64_t ticks) const { return ticks; }
+};
+
+template <class Units, class Count = uint32_t>
 class BasicCycleAnchoredCounter {
 public:
     using Phase = CounterPhase;
@@ -108,20 +114,20 @@ public:
     bool Rescale(uint64_t cycle, uint64_t cycles, uint64_t ticks);
     bool SetRate(GuestCycleClock::Rate core, GuestCycleClock::Rate tick);
     bool RescaleRate(uint64_t cycle, GuestCycleClock::Rate core, GuestCycleClock::Rate tick);
-    bool AnchorAtPhase(uint64_t cycle, uint32_t count, uint64_t phase, uint64_t denominator);
-    void AnchorAt(uint64_t cycle, uint32_t count, const Phase& phase);
+    bool AnchorAtPhase(uint64_t cycle, Count count, uint64_t phase, uint64_t denominator);
+    void AnchorAt(uint64_t cycle, Count count, const Phase& phase);
     Phase TickPhaseAt(uint64_t cycle) const;
     /* MCIMX51RM Figure 29-8 (page 29-11), MCIMX31RM Figure 33-9 (page 33-14): after a
        prescaler value change the next prescaled pulse comes on the next input clock edge. */
     Phase DivideChangePhase(uint64_t cycle, uint64_t old_divide, uint64_t new_divide) const;
 
-    void Anchor(uint64_t cycle, uint32_t count) {
+    void Anchor(uint64_t cycle, Count count) {
         anchor_cycle_ = cycle;
         anchor_count_ = count;
     }
 
-    void SetCountAt(uint64_t cycle, uint32_t count) {
-        anchor_count_ = count - static_cast<uint32_t>(TicksSince(cycle));
+    void SetCountAt(uint64_t cycle, Count count) {
+        anchor_count_ = count - static_cast<Count>(TicksSince(cycle));
     }
 
     uint64_t PhaseAt(uint64_t cycle) const { return units_.TickRemainder(cycle - anchor_cycle_); }
@@ -132,40 +138,42 @@ public:
     }
 
     uint64_t AnchorCycle() const { return anchor_cycle_; }
-    uint32_t AnchorCount() const { return anchor_count_; }
+    Count    AnchorCount() const { return anchor_count_; }
 
     uint64_t TicksSince(uint64_t cycle) const { return units_.Ticks(cycle - anchor_cycle_); }
 
-    uint32_t CountAt(uint64_t cycle) const {
-        return anchor_count_ + static_cast<uint32_t>(TicksSince(cycle));
-    }
+    Count CountAt(uint64_t cycle) const { return anchor_count_ + static_cast<Count>(TicksSince(cycle)); }
 
     uint64_t CycleOfTick(uint64_t ticks_after_anchor) const {
         return anchor_cycle_ + units_.CyclesCeil(ticks_after_anchor);
     }
 
-    uint64_t NextMatchCycle(uint32_t match, uint64_t cycle) const {
-        const uint64_t since = TicksSince(cycle);
-        const uint32_t d     = match - (anchor_count_ + static_cast<uint32_t>(since));
-        return CycleOfTick(since + (d != 0u ? d : kCounterWrapTicks));
+    template <uint32_t kBits = 8u * sizeof(Count)>
+        requires(kBits < 64u && kBits <= 8u * sizeof(Count))
+    uint64_t NextMatchCycle(Count match, uint64_t cycle) const {
+        constexpr uint64_t kWrap = uint64_t{1} << kBits;
+        const uint64_t     since = TicksSince(cycle);
+        const uint64_t     count = static_cast<uint64_t>(anchor_count_) + since;
+        const uint64_t     d     = (static_cast<uint64_t>(match) - count) & (kWrap - 1u);
+        return CycleOfTick(since + (d != 0u ? d : kWrap));
     }
 
 private:
-    static constexpr uint64_t kCounterWrapTicks = 0x100000000ull;
-
     static bool RateRatio(GuestCycleClock::Rate core, GuestCycleClock::Rate tick,
                           WideUint<2>& cycles, WideUint<2>& ticks);
     static bool ReduceRatio(uint64_t cycles, uint64_t ticks, WideUint<2>& cyc, WideUint<2>& tk);
 
     void ReplaceUnits(uint64_t cycle, const WideUint<2>& cycles, const WideUint<2>& ticks);
-    void PlaceAnchor(uint64_t cycle, uint32_t count, const Phase& phase);
+    void PlaceAnchor(uint64_t cycle, Count count, const Phase& phase);
 
-    uint32_t anchor_count_ = 0;
+    Count    anchor_count_ = 0;
     uint64_t anchor_cycle_ = 0;
     Units    units_;
 };
 
 using CycleAnchoredCounter       = BasicCycleAnchoredCounter<ExactCounterUnits>;
 using NarrowCycleAnchoredCounter = BasicCycleAnchoredCounter<NarrowCounterUnits>;
+using TickAnchoredCounter        = BasicCycleAnchoredCounter<IdentityCounterUnits>;
+using WideTickAnchoredCounter    = BasicCycleAnchoredCounter<IdentityCounterUnits, uint64_t>;
 
 }

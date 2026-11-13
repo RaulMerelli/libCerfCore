@@ -96,6 +96,7 @@ public:
 
     CardCycle  DecodeCycle(uint32_t area, uint32_t offset, bool io, bool write);
     SocketPins Pins(uint32_t ch);
+    void       ApplyInputGating(uint32_t gated_ports);
 
     void    OnCardDetectChanged(PcmciaSlot& slot) override;
     void    OnReadyIreqLow(PcmciaSlot& slot) override;
@@ -118,6 +119,8 @@ private:
     uint32_t    ChannelOf(const PcmciaSlot& slot) const;
     bool        ReadyPinHighLocked(uint32_t ch) const;
     bool        IoInterfaceLocked(uint32_t ch) const;
+    SocketPins  PresentedPinsLocked(uint32_t ch) const;
+    void        SyncCardDetectLocked(uint32_t ch);
     bool        IreqEdgeModeLocked() const;
     uint32_t    IreqModeLocked() const;
     SocketPins  PinsLocked(uint32_t ch) const;
@@ -135,11 +138,12 @@ private:
     PcmciaSlot                  slot1_;
     PcmciaSlot*                 slots_[2];
     Hd64461Intc*                intc_              = nullptr;
-    const Hd64461Gpio*          gpio_              = nullptr;
+    Hd64461Gpio*                gpio_              = nullptr;
     const Hd64461SocketWiring*  wiring_            = nullptr;
     const Hd64461SystemControl* system_            = nullptr;
     bool                        ready_ireq_low_[2] = {};
     bool                        ready_pin_high_[2] = {true, true};
+    bool                        card_detect_seen_[2] = {};
 };
 
 }

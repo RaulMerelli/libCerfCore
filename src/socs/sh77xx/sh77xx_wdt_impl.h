@@ -7,12 +7,13 @@
 #include <cerfcore/core/fatal.h>
 #include <cerfcore/socs/guest_cpu_reset.h>
 #include <cerfcore/state/state_stream.h>
+#include <cerfengine/sh/sh_cpu.h>
+#include "../../execution/engine_bridge.h"
 #include "../../execution/guest_cycle_clock.h"
 #include "../cycle_anchored_counter.h"
-#include "../rated_tick_count.h"
 #include "../reg_window_impl.h"
-#include "sh77xx_cpg.h"
 #include "sh77xx_frqcr.h"
+#include "sh77xx_peripheral_clock_ticks.h"
 #include "sh77xx_wdt.h"
 
 namespace cerfcore {
@@ -31,23 +32,30 @@ inline constexpr uint32_t kBase = 0x1FFFFF84u;
 inline constexpr uint32_t kWtcnt = 0u;
 inline constexpr uint32_t kWtcsr = 1u;
 
-inline constexpr uint16_t kWtcntKey = 0x5Au;
-inline constexpr uint16_t kWtcsrKey = 0xA5u;
-inline constexpr uint16_t kData     = 0x00FFu;
-inline constexpr uint16_t kWtcsrTme = 0x0080u;
-inline constexpr uint16_t kWtcsrCks = 0x0007u;
+inline constexpr uint16_t kWtcntKey   = 0x5Au;
+inline constexpr uint16_t kWtcsrKey   = 0xA5u;
+inline constexpr uint16_t kData       = 0x00FFu;
+inline constexpr uint16_t kWtcsrTme   = 0x0080u;
+inline constexpr uint16_t kWtcsrWt    = 0x0040u;
+inline constexpr uint16_t kWtcsrRsts  = 0x0020u;
+inline constexpr uint16_t kWtcsrWovf  = 0x0010u;
+inline constexpr uint16_t kWtcsrCks   = 0x0007u;
+inline constexpr uint16_t kWtcsrClock = kWtcsrWt | kWtcsrCks;
 
-inline constexpr uint64_t kCksDivision[8]      = {1u, 4u, 16u, 32u, 64u, 256u, 1024u, 4096u};
+inline constexpr uint32_t kCksShift[8]         = {0u, 2u, 4u, 5u, 6u, 8u, 10u, 12u};
+inline constexpr uint64_t kCounterSpan         = 0x100u;
 inline constexpr uint64_t kStandbyReentryCount = 0x80u;
 
-constexpr RegSpec Register(uint16_t fatal_on_set) {
-    return RegSpec{ReadKind::kFatal, WriteKind::kStored, kData, 0u, fatal_on_set, OtherReset::kRetain};
+enum class Count : uint8_t { kNone, kStandbyExit, kWatchdog };
+
+constexpr RegSpec Register() {
+    return RegSpec{ReadKind::kFatal, WriteKind::kStored, kData, 0u, 0u, OtherReset::kRetain};
 }
 
 constexpr RegWindowModel WindowOf() {
     RegWindowModel w{kBase, 4u, 2u, false, {}};
-    w.reg[kWtcnt] = Register(0u);
-    w.reg[kWtcsr] = Register(kWtcsrTme);
+    w.reg[kWtcnt] = Register();
+    w.reg[kWtcsr] = Register();
     return w;
 }
 
@@ -63,114 +71,167 @@ public:
     void OnReady() override {
         Base::OnReady();
         clock_ = &this->emu_.template Get<GuestCycleClock>();
-        cpg_   = &this->emu_.template Get<Sh77xxCpg>();
-        event_ = clock_->Add([this] { OnStandbyReentry(); });
-        clock_->RegisterRateListener([this] { Retime(); });
-        this->emu_.template Get<GuestCpuReset>().RegisterResetListener([this](ResetLineKind) { Disarm(); });
+        cpu_   = &this->emu_.template Get<EngineBridge>().Engine().template Get<cerfengine::ShCpu>();
+        frqcr_ = this->emu_.template TryGet<Sh77xxFrqcr>();
+        event_ = clock_->Add([this] { OnCountEnd(); });
+        if (frqcr_ != nullptr) {
+            pclk_.Attach([this] { Retime(); });
+            frqcr_->RegisterChangeListener([this](uint16_t from, uint16_t to) { OnFrequencyChange(from, to); });
+        }
+        this->emu_.template Get<GuestCpuReset>().RegisterResetListener([this](ResetLineKind kind) { OnReset(kind); });
     }
 
     void WriteHalf(uint32_t addr, uint16_t value) override {
-        const uint16_t key = (addr - kBase) / 2u == kWtcnt ? kWtcntKey : kWtcsrKey;
+        const uint32_t reg = (addr - kBase) / 2u;
+        const uint16_t key = reg == kWtcnt ? kWtcntKey : kWtcsrKey;
         if ((value >> 8) != key) this->HaltUnsupportedAccess("WriteHalf without the register key", addr, value);
-        if (counting_) {
+        if (count_ == Count::kStandbyExit) {
             this->emu_.template Get<Fatal>().Die("Sh77xxWdt: write of 0x%04X at 0x%08X while the WDT counts after a standby exit",
                                                  value, addr);
         }
-        Base::WriteHalf(addr, static_cast<uint16_t>(value & kData));
+        const uint16_t data = static_cast<uint16_t>(value & kData);
+        if (count_ == Count::kWatchdog) {
+            WriteWhileCounting(addr, reg, data);
+            return;
+        }
+        Base::WriteHalf(addr, data);
+        if (reg == kWtcsr && (data & kWtcsrTme) != 0u) StartWatchdog(this->StoredReg(kWtcnt));
     }
 
     void CountAfterStandby() override {
-        counting_    = true;
-        count_frqcr_ = Frqcr();
-        pclk_.SetRate(clock_->ClockRate(), cpg_->PeripheralRate(count_frqcr_));
-        pclk_.Start(clock_->Cycles());
-        Arm();
+        if (count_ == Count::kWatchdog) {
+            this->emu_.template Get<Fatal>().Die("Sh77xxWdt: a standby exit while WTCSR 0x%02X has TME set",
+                                                 this->StoredReg(kWtcsr));
+        }
+        StartCount(Count::kStandbyExit, 0u);
     }
 
     void StopStandbyCount() override {
-        if (!counting_) return;
-        RequireCountClock();
-        Disarm();
+        if (count_ == Count::kStandbyExit) Disarm();
     }
 
     void SaveState(StateWriter& w) override {
         Base::SaveState(w);
-        const uint64_t now = clock_->Cycles();
-        w.Write("standby_count", counting_);
-        w.Write("standby_count_frqcr", count_frqcr_);
-        w.Write("standby_count_ticks", counting_ ? pclk_.TicksAt(now) : uint64_t{0u});
-        (counting_ ? pclk_.TickPhaseAt(now) : CounterPhase{}).Save(w, "standby_count_phase");
+        if (frqcr_ != nullptr) pclk_.Save(w);
+        w.Write("count", static_cast<uint8_t>(count_));
+        w.Write("live_count", count_ == Count::kNone ? uint16_t{0u} : CurrentCount());
     }
 
     void RestoreState(StateReader& r) override {
         Base::RestoreState(r);
-        r.Read("standby_count", counting_);
-        r.Read("standby_count_frqcr", count_frqcr_);
-        r.Read("standby_count_ticks", restored_ticks_);
-        restored_phase_.Restore(r, "standby_count_phase");
+        if (frqcr_ != nullptr) pclk_.Restore(r);
+        uint8_t count = 0u;
+        r.Read("count", count);
+        count_ = static_cast<Count>(count);
+        r.Read("live_count", restored_count_);
     }
 
     void PostRestore() override {
-        if (!counting_) {
+        if (frqcr_ != nullptr) pclk_.PostRestore();
+        if (count_ == Count::kNone) {
             clock_->Disarm(event_);
             return;
         }
-        pclk_.SetRate(clock_->ClockRate(), cpg_->PeripheralRate(count_frqcr_));
-        pclk_.PlaceAtPhase(clock_->Cycles(), restored_ticks_, restored_phase_);
+        counter_.Anchor(DividedTicks(), restored_count_);
         Arm();
     }
 
 private:
-    uint16_t Frqcr() {
-        const Sh77xxFrqcr* frqcr = this->emu_.template TryGet<Sh77xxFrqcr>();
-        if (frqcr == nullptr) {
-            this->emu_.template Get<Fatal>().Die("Sh77xxWdt: the count after a standby exit on %.*s needs FRQCR, "
-                                                 "and no FRQCR model exists for it",
+    void WriteWhileCounting(uint32_t addr, uint32_t reg, uint16_t data) {
+        if (reg == kWtcnt) {
+            Base::WriteHalf(addr, data);
+            StartWatchdog(data);
+            return;
+        }
+        if ((data & kWtcsrTme) == 0u) {
+            this->SetStoredReg(kWtcnt, CurrentCount());
+            Disarm();
+            Base::WriteHalf(addr, data);
+            return;
+        }
+        const uint16_t csr = this->StoredReg(kWtcsr);
+        if (((data ^ csr) & kWtcsrClock) != 0u) {
+            this->emu_.template Get<Fatal>().Die(
+                "Sh77xxWdt: WTCSR write of 0x%02X changes WT/IT or CKS while the WDT counts (WTCSR 0x%02X)", data, csr);
+        }
+        Base::WriteHalf(addr, data);
+    }
+
+    void StartWatchdog(uint16_t value) {
+        const uint16_t csr = this->StoredReg(kWtcsr);
+        if ((csr & kWtcsrWt) == 0u) {
+            this->emu_.template Get<Fatal>().Die("Sh77xxWdt: WTCSR 0x%02X starts the interval timer mode", csr);
+        }
+        StartCount(Count::kWatchdog, value);
+    }
+
+    void StartCount(Count mode, uint16_t value) {
+        if (frqcr_ == nullptr) {
+            this->emu_.template Get<Fatal>().Die("Sh77xxWdt: counting on %.*s needs FRQCR, and no FRQCR model exists for it",
                                                  static_cast<int>(Soc.size()), Soc.data());
         }
-        return frqcr->Value();
+        count_ = mode;
+        counter_.Anchor(DividedTicks(), value);
+        Arm();
     }
 
-    void RequireCountClock() {
-        const uint16_t frqcr = Frqcr();
-        if (frqcr == count_frqcr_) return;
-        this->emu_.template Get<Fatal>().Die(
-            "Sh77xxWdt: FRQCR changed from 0x%04X to 0x%04X while the WDT counts after a standby exit", count_frqcr_,
-            frqcr);
+    uint32_t Shift() const { return kCksShift[this->StoredReg(kWtcsr) & kWtcsrCks]; }
+
+    uint64_t DividedTicks() const { return pclk_.DividedTicks(Shift()); }
+
+    uint16_t CurrentCount() const { return static_cast<uint16_t>(counter_.CountAt(DividedTicks()) & kData); }
+
+    uint64_t EndTick() const {
+        const uint64_t end = count_ == Count::kWatchdog ? kCounterSpan : kStandbyReentryCount;
+        return counter_.CycleOfTick(end - counter_.AnchorCount());
     }
 
-    void Arm() {
-        const uint64_t ticks = kStandbyReentryCount * kCksDivision[this->StoredReg(kWtcsr) & kWtcsrCks];
-        clock_->Arm(event_, pclk_.CycleOfTick(ticks));
-    }
+    void Arm() { clock_->Arm(event_, pclk_.CycleOfDividedTick(EndTick(), Shift())); }
 
     void Disarm() {
-        counting_ = false;
+        count_ = Count::kNone;
         clock_->Disarm(event_);
     }
 
     void Retime() {
-        if (!counting_) return;
-        RequireCountClock();
-        pclk_.Rescale(clock_->Cycles(), clock_->ClockRate(), cpg_->PeripheralRate(count_frqcr_));
+        if (count_ != Count::kNone) Arm();
+    }
+
+    void OnFrequencyChange(uint16_t from, uint16_t to) {
+        if (count_ == Count::kNone || from == to) return;
+        this->emu_.template Get<Fatal>().Die("Sh77xxWdt: FRQCR changed from 0x%04X to 0x%04X while the WDT counts", from,
+                                             to);
+    }
+
+    void OnReset(ResetLineKind kind) {
+        if (count_ == Count::kStandbyExit || kind == ResetLineKind::Rtc) Disarm();
+    }
+
+    void OnCountEnd() {
+        const uint16_t csr = this->StoredReg(kWtcsr);
+        if (count_ == Count::kStandbyExit) {
+            this->emu_.template Get<Fatal>().Die(
+                "Sh77xxWdt: WTCNT reached H'80 after a standby exit with STBCR.STBY set (WTCSR CKS %u)", csr & kWtcsrCks);
+        }
+        if ((csr & kWtcsrRsts) == 0u) {
+            this->emu_.template Get<Fatal>().Die(
+                "Sh77xxWdt: WTCNT overflow in watchdog timer mode selects a power-on reset (WTCSR 0x%02X)", csr);
+        }
+        this->SetStoredReg(kWtcsr, static_cast<uint16_t>(csr | kWtcsrWovf));
+        counter_.Anchor(EndTick(), 0u);
         Arm();
+        cpu_->SetPendingResetKind(cerfengine::ShResetKind::kManual);
+        this->emu_.template Get<GuestCpuReset>().ResetWithLatchedCause(ResetLineKind::Watchdog);
     }
 
-    void OnStandbyReentry() {
-        RequireCountClock();
-        this->emu_.template Get<Fatal>().Die(
-            "Sh77xxWdt: WTCNT reached H'80 after a standby exit with STBCR.STBY set (WTCSR CKS %u)",
-            this->StoredReg(kWtcsr) & kWtcsrCks);
-    }
-
-    GuestCycleClock*        clock_          = nullptr;
-    GuestCycleClock::Event* event_          = nullptr;
-    Sh77xxCpg*              cpg_            = nullptr;
-    RatedTickCount          pclk_{this->emu_};
-    CounterPhase            restored_phase_{};
-    uint64_t                restored_ticks_ = 0u;
-    uint16_t                count_frqcr_    = 0u;
-    bool                    counting_       = false;
+    GuestCycleClock*           clock_ = nullptr;
+    GuestCycleClock::Event*    event_ = nullptr;
+    cerfengine::ShCpu*         cpu_   = nullptr;
+    Sh77xxFrqcr*               frqcr_ = nullptr;
+    Sh77xxPeripheralClockTicks pclk_{this->emu_};
+    TickAnchoredCounter        counter_;
+    uint16_t                   restored_count_ = 0u;
+    Count                      count_          = Count::kNone;
 };
 
 }

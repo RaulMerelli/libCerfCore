@@ -28,6 +28,12 @@ uint64_t Sh77xxPeripheralClockTicks::Ticks() const { return ticks_.TicksAt(clock
 
 uint64_t Sh77xxPeripheralClockTicks::CycleOfTick(uint64_t tick) const { return ticks_.CycleOfTick(tick); }
 
+uint64_t Sh77xxPeripheralClockTicks::DividedTicks(uint32_t shift) const { return Ticks() >> shift; }
+
+uint64_t Sh77xxPeripheralClockTicks::CycleOfDividedTick(uint64_t tick, uint32_t shift) const {
+    return CycleOfTick(tick << shift);
+}
+
 void Sh77xxPeripheralClockTicks::Retime() {
     ticks_.Rescale(clock_->Cycles(), clock_->ClockRate(), rate_);
     on_retime_();
