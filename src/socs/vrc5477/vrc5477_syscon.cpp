@@ -6,10 +6,11 @@
 #include <cerfcore/boards/board_context.h>
 #include "../../cpu/vr5500/vr5500_id.h"
 #include "../../peripherals/peripheral_dispatcher.h"
-#include "../../peripherals/pci/pci_host_bridge.h"
 #include <cerfcore/socs/guest_cpu_reset.h>
 #include <cerfcore/state/state_stream.h>
 #include "vrc5477_intc.h"
+#include "vrc5477_pci.h"
+#include "vrc5477_timers.h"
 
 #include <cstdint>
 #include <cstring>
@@ -24,17 +25,16 @@ constexpr uint32_t kBlockSize = 0x800u;       /* low system-controller register 
 constexpr uint32_t kIntcLo = 0x400u;          /* INTC sub-block, delegated to Vrc5477Intc */
 constexpr uint32_t kIntcHi = 0x490u;
 
-/* PCI host-bridge control registers delegated to the PciHostBridge (it needs them
-   to decode config-vs-memory window cycles): PCIW0 @0x60, PCIINIT00 @0x2F0. */
-constexpr uint32_t kPciW0    = 0x60u;
-constexpr uint32_t kPciInit00 = 0x2F0u;
+constexpr uint32_t kPci0AliasFirst = 0x0E0u;
+constexpr uint32_t kPci0AliasEnd   = 0x100u;
+constexpr uint32_t kPci0AliasShift = 0x200u;
 
-/* Active sub-blocks that generate interrupts/transfers loud-fatal here until each
-   has its own full peripheral: store/readback would silently stub them (no IRQ,
-   no DMA) and hang the guest with no diagnostic. */
+uint32_t CanonicalOffset(uint32_t off) {
+    return off >= kPci0AliasFirst && off < kPci0AliasEnd ? off + kPci0AliasShift : off;
+}
+
 bool IsActiveBlock(uint32_t off, const char** which) {
-    if (off >= 0x1D0u && off < 0x200u) { *which = "SPT/WDT timer"; return true; }
-    if (off >= 0x300u && off < 0x3C0u) { *which = "DMA";           return true; }
+    if (off >= 0x300u && off < 0x3C0u) { *which = "DMA"; return true; }
     return false;
 }
 
@@ -47,6 +47,8 @@ public:
         return bd && bd->GetSocId() == SocId::Vr5500;
     }
     void OnReady() override {
+        timers_ = &emu_.Get<Vrc5477Timers>();
+        pci_    = &emu_.Get<Vrc5477Pci>();
         emu_.Get<GuestCpuReset>().RegisterResetListener([this](ResetLineKind) {
             std::memset(regs_, 0, sizeof(regs_));
         });
@@ -66,16 +68,18 @@ public:
     void SaveState(StateWriter& w) override {
         w.WriteBytes("regs", regs_, sizeof(regs_));
         emu_.Get<Vrc5477Intc>().SaveState(w);
+        timers_->SaveState(w);
     }
     void RestoreState(StateReader& r) override {
         r.ReadBytes("regs", regs_, sizeof(regs_));
         emu_.Get<Vrc5477Intc>().RestoreState(r);
+        timers_->RestoreState(r);
     }
     void PostRestore() override { emu_.Get<Vrc5477Intc>().Renotify(); }
 
 private:
     template <typename T> T Read(uint32_t addr) {
-        const uint32_t off = addr - kBlockBase;
+        const uint32_t off = CanonicalOffset(addr - kBlockBase);
         if (off >= kIntcLo && off < kIntcHi) {
             if constexpr (sizeof(T) == 4) {
                 return static_cast<T>(emu_.Get<Vrc5477Intc>().ReadReg(off - kIntcLo));
@@ -83,11 +87,18 @@ private:
                 HaltUnsupportedAccess("INTC sub-word read", addr, 0);
             }
         }
-        if (off == kPciW0 || off == kPciInit00) {
+        if (Vrc5477Pci::Owns(off)) {
             if constexpr (sizeof(T) == 4) {
-                return static_cast<T>(emu_.Get<PciHostBridge>().CtrlReadReg(off));
+                return static_cast<T>(pci_->ReadReg(off));
             } else {
                 HaltUnsupportedAccess("PCI ctrl sub-word read", addr, 0);
+            }
+        }
+        if (Vrc5477Timers::Owns(off)) {
+            if constexpr (sizeof(T) == 4) {
+                return static_cast<T>(timers_->ReadReg(off));
+            } else {
+                HaltUnsupportedAccess("timer sub-word read", addr, 0);
             }
         }
         const char* which = nullptr;
@@ -100,7 +111,7 @@ private:
         return v;
     }
     template <typename T> void Write(uint32_t addr, T v) {
-        const uint32_t off = addr - kBlockBase;
+        const uint32_t off = CanonicalOffset(addr - kBlockBase);
         if (off >= kIntcLo && off < kIntcHi) {
             if constexpr (sizeof(T) == 4) {
                 emu_.Get<Vrc5477Intc>().WriteReg(off - kIntcLo, static_cast<uint32_t>(v));
@@ -109,12 +120,29 @@ private:
                 HaltUnsupportedAccess("INTC sub-word write", addr, v);
             }
         }
-        if (off == kPciW0 || off == kPciInit00) {
+        if (Vrc5477Pci::Owns(off)) {
             if constexpr (sizeof(T) == 4) {
-                emu_.Get<PciHostBridge>().CtrlWriteReg(off, static_cast<uint32_t>(v));
+                pci_->WriteReg(off, static_cast<uint32_t>(v));
                 return;
             } else {
                 HaltUnsupportedAccess("PCI ctrl sub-word write", addr, v);
+            }
+        }
+        if (Vrc5477Pci::IsBusControlHigh(off)) {
+            if constexpr (sizeof(T) == 4) {
+                std::memcpy(&regs_[off], &v, sizeof(T));
+                pci_->BusControlHighWritten(off, static_cast<uint32_t>(v));
+                return;
+            } else {
+                HaltUnsupportedAccess("PCI control-high sub-word write", addr, v);
+            }
+        }
+        if (Vrc5477Timers::Owns(off)) {
+            if constexpr (sizeof(T) == 4) {
+                timers_->WriteReg(off, static_cast<uint32_t>(v));
+                return;
+            } else {
+                HaltUnsupportedAccess("timer sub-word write", addr, v);
             }
         }
         const char* which = nullptr;
@@ -126,7 +154,9 @@ private:
         std::memcpy(&regs_[off], &v, sizeof(T));
     }
 
-    uint8_t regs_[kBlockSize] = {};
+    Vrc5477Timers* timers_ = nullptr;
+    Vrc5477Pci*    pci_    = nullptr;
+    uint8_t        regs_[kBlockSize] = {};
 };
 
 }  /* namespace */

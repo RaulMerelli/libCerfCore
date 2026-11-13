@@ -40,23 +40,21 @@ public:
         auto& pci = emu_.Get<PciHostBridge>();
         pci.RegisterPciDevice(&socket_a_);
         pci.RegisterPciDevice(&socket_b_);
+        pci.RegisterBusResetListener([this] {
+            ResetFromLine();
+            RedetectCards();
+            UpdateLines();
+        });
         emu_.Get<HostWidgetRegistry>().Register(&socket_a_.Slot());
         sequencer_.Run([this] {
             return ExcaSocketUpdates{{ {&socket_a_.Slot(), ExcaWriteEffect::SocketOff()},
                                        {&socket_b_.Slot(), ExcaWriteEffect::SocketOff()} }};
         });
         auto& reset = emu_.Get<GuestCpuReset>();
-        reset.RegisterResetListener([this](ResetLineKind) {
-            sequencer_.Run([this] {
-                ResetRegisters();
-                return ExcaSocketUpdates{{ {&socket_a_.Slot(), ExcaWriteEffect::SocketOff()},
-                                           {&socket_b_.Slot(), ExcaWriteEffect::SocketOff()} }};
-            });
-        });
+        reset.RegisterResetListener([this](ResetLineKind) { ResetFromLine(); });
         reset.RegisterResetReleaseListener([this] {
-            std::lock_guard<std::mutex> lk(mtx_);
-            socket_a_.UpdateLineLocked(true);
-            socket_b_.UpdateLineLocked(true);
+            RedetectCards();
+            UpdateLines();
         });
         emu_.Get<PcmciaAutoInsert>().InsertDefaultNetworkCard(socket_a_.Slot());
     }
@@ -72,6 +70,25 @@ public:
     }
 
 private:
+    void ResetFromLine() {
+        sequencer_.Run([this] {
+            ResetRegisters();
+            return ExcaSocketUpdates{{ {&socket_a_.Slot(), ExcaWriteEffect::SocketOff()},
+                                       {&socket_b_.Slot(), ExcaWriteEffect::SocketOff()} }};
+        });
+    }
+
+    void RedetectCards() {
+        if (socket_a_.Slot().HasCard()) socket_a_.OnCardDetectChanged(socket_a_.Slot());
+        if (socket_b_.Slot().HasCard()) socket_b_.OnCardDetectChanged(socket_b_.Slot());
+    }
+
+    void UpdateLines() {
+        std::lock_guard<std::mutex> lk(mtx_);
+        socket_a_.UpdateLineLocked(true);
+        socket_b_.UpdateLineLocked(true);
+    }
+
     void ResetRegisters() {
         std::lock_guard<std::mutex> lk(mtx_);
         shared_.Reset(board_->MultifunctionRoutingAtPowerOn(), board_->SerialEepromPresent(),

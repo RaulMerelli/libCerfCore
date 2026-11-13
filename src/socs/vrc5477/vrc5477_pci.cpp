@@ -1,161 +1,147 @@
-#include "../../peripherals/pci/pci_host_bridge.h"
-#include "../../peripherals/pci/pci_device.h"
+#include "vrc5477_pci.h"
 
-#include <cerfcore/core/byte_order.h>
-#include <cerfcore/core/cerf_emulator.h>
-#include <cerfcore/core/log.h>
 #include <cerfcore/boards/board_context.h>
-#include "../../cpu/vr5500/vr5500_id.h"
+#include <cerfcore/core/cerf_emulator.h>
+#include <cerfcore/core/fatal.h>
 #include <cerfcore/socs/guest_cpu_reset.h>
-#include <cerfcore/state/state_stream.h>
+#include "../../cpu/vr5500/vr5500_id.h"
 
-#include <cstdint>
-#include <vector>
+#include <utility>
 
 namespace cerfcore {
 
 namespace {
 
-constexpr uint32_t kPciMemBase = 0x08000000u;    /* PCIW0 & PCI_INIT_ADDR_MASK */
+using Reg = Vrc5477PciChannel::Register;
 
-constexpr uint32_t kPciInitTypeMask = 7u << 1;   /* PCI_INIT_TYPE_MASK */
-constexpr uint32_t kPciInitTypeCfg  = 5u << 1;   /* PCI_INIT_TYPE_CFG  */
+constexpr uint32_t kExternalWindowBase   = 0x08000000u;
+constexpr uint32_t kExternalWindowSize   = 0x08000000u;
+constexpr uint32_t kExternalIoWindowBase = 0x14001000u;
+constexpr uint32_t kExternalIoWindowSize = 0x01FFF000u;
+constexpr uint32_t kInternalWindowBase   = 0x1D000000u;
+constexpr uint32_t kInternalWindowSize   = 0x01000000u;
+constexpr uint32_t kInternalIoWindowBase = 0x1C000000u;
+constexpr uint32_t kInternalIoWindowSize = 0x01000000u;
 
-constexpr uint32_t kOffPciw0     = 0x60u;
-constexpr uint32_t kOffPciInit00 = 0x2F0u;
+constexpr uint32_t kOffPciCtl0H = 0x2E4u;
+constexpr uint32_t kOffPciCtl1H = 0x6E4u;
 
-class Vrc5477Pci : public PciHostBridge {
-public:
-    using PciHostBridge::PciHostBridge;
+constexpr uint32_t kPciCtlHighColdReset = 0x80000000u;
+constexpr uint32_t kPciCtlHighWarmReset = 0x40000000u;
 
-    bool ShouldRegister() override {
-        return emu_.Get<BoardContext>().GetSocId() == SocId::Vr5500;
-    }
-
-    void OnReady() override {
-        emu_.Get<GuestCpuReset>().RegisterResetListener([this](ResetLineKind) {
-            pciinit00_ = 0;
-            pciw0_     = 0;
-        });
-    }
-
-    void RegisterPciDevice(PciDevice* dev) override { devices_.push_back(dev); }
-
-    uint32_t CtrlReadReg(uint32_t off) override {
-        if (off == kOffPciInit00) return pciinit00_;
-        if (off == kOffPciw0)     return pciw0_;
-        return 0;
-    }
-    void CtrlWriteReg(uint32_t off, uint32_t v) override {
-        if (off == kOffPciInit00)      pciinit00_ = v;
-        else if (off == kOffPciw0)     pciw0_ = v;
-    }
-
-    uint32_t WindowRead(uint32_t addr, unsigned size) override {
-        if (IsConfigCycle()) {
-            PciDevice* d = nullptr; uint32_t reg = 0;
-            if (!DecodeConfig(addr, &d, &reg)) return cerf::ByteWidthMask(size);
-            return Extract(d->ConfigRead(reg & ~3u), addr, size);
-        }
-        for (PciDevice* d : devices_)
-            if (d->MemClaims(addr)) return d->MemRead(addr, size);
-        return cerf::ByteWidthMask(size);
-    }
-    void WindowWrite(uint32_t addr, uint32_t v, unsigned size) override {
-        if (IsConfigCycle()) {
-            PciDevice* d = nullptr; uint32_t reg = 0;
-            if (!DecodeConfig(addr, &d, &reg)) return;
-            if (size >= 4) { d->ConfigWrite(reg & ~3u, v); return; }
-            d->ConfigWrite(reg & ~3u, Merge(d->ConfigRead(reg & ~3u), v, reg, size));
-            return;
-        }
-        for (PciDevice* d : devices_)
-            if (d->MemClaims(addr)) { d->MemWrite(addr, v, size); return; }
-    }
-
-    uint32_t WindowIoRead(uint32_t pci_io, unsigned size) override {
-        for (PciDevice* d : devices_)
-            if (d->IoClaims(pci_io)) return d->IoRead(pci_io, size);
-        return cerf::ByteWidthMask(size);
-    }
-    void WindowIoWrite(uint32_t pci_io, uint32_t v, unsigned size) override {
-        for (PciDevice* d : devices_)
-            if (d->IoClaims(pci_io)) { d->IoWrite(pci_io, v, size); return; }
-    }
-
-    void SaveState(StateWriter& w) override {
-        w.Write("pciinit00", pciinit00_);
-        w.Write("pciw0", pciw0_);
-        w.Write<uint32_t>("devices_count", static_cast<uint32_t>(devices_.size()));
-        for (PciDevice* d : devices_) {
-            w.BeginFrame(static_cast<uint32_t>((d->PciDev() << 8) | d->PciFnc()));
-            d->SaveState(w);
-            w.EndFrame();
-        }
-    }
-    void RestoreState(StateReader& r) override {
-        r.Read("pciinit00", pciinit00_);
-        r.Read("pciw0", pciw0_);
-        uint32_t n = 0;
-        r.Read("devices_count", n);
-        if (n != devices_.size())
-            r.Reject("Vrc5477Pci: %u devices, this build has %zu", n, devices_.size());
-        for (uint32_t i = 0; i < n; ++i) {
-            const uint32_t tag = r.EnterFrame();
-            const uint8_t dev = static_cast<uint8_t>(tag >> 8);
-            const uint8_t fnc = static_cast<uint8_t>(tag & 0xFFu);
-            size_t match = devices_.size();
-            for (size_t k = 0; k < devices_.size(); ++k) {
-                if (devices_[k]->PciDev() == dev && devices_[k]->PciFnc() == fnc) {
-                    match = k;
-                    break;
-                }
-            }
-            if (match == devices_.size())
-                r.Reject("Vrc5477Pci: no device dev=%u fnc=%u in this build", dev, fnc);
-            devices_[match]->RestoreState(r);
-            r.LeaveFrame();
-        }
-    }
-
-    void PostRestore() override {
-        for (PciDevice* d : devices_) d->PostRestore();
-    }
-
-private:
-    bool IsConfigCycle() const { return (pciinit00_ & kPciInitTypeMask) == kPciInitTypeCfg; }
-
-    bool DecodeConfig(uint32_t addr, PciDevice** out_dev, uint32_t* out_reg) {
-        const uint32_t off    = addr - kPciMemBase;
-        const uint32_t devsel = off & ~0x7FFu;        /* bits >=11 hold 1<<(dev+10) */
-        const uint32_t fnc    = (off >> 8) & 7u;
-        for (uint32_t dev = 1; dev <= 21; ++dev) {
-            if (devsel != (1u << (dev + 10))) continue;
-            for (PciDevice* d : devices_)
-                if (d->PciDev() == dev && d->PciFnc() == fnc) {
-                    *out_dev = d; *out_reg = off & 0xFFu; return true;
-                }
-            return false;                              /* valid slot, no device = absent */
-        }
-        return false;
-    }
-
-    static uint32_t Extract(uint32_t dword, uint32_t addr, unsigned size) {
-        return (dword >> ((addr & 3u) * 8u)) & cerf::ByteWidthMask(size);
-    }
-    static uint32_t Merge(uint32_t dword, uint32_t v, uint32_t reg, unsigned size) {
-        const unsigned shift = (reg & 3u) * 8u;
-        const uint32_t mask  = cerf::ByteWidthMask(size) << shift;
-        return (dword & ~mask) | ((v << shift) & mask);
-    }
-
-    std::vector<PciDevice*> devices_;
-    uint32_t pciinit00_ = 0;
-    uint32_t pciw0_     = 0;
+struct ControlRegister {
+    uint32_t            off;
+    Vrc5477PciChannelId channel;
+    Reg                 reg;
+    bool                upper;
 };
+
+constexpr ControlRegister kControlRegisters[] = {
+    {0x060u, Vrc5477PciChannelId::kExternal, Reg::kWindow0, false},
+    {0x064u, Vrc5477PciChannelId::kExternal, Reg::kWindow0, true},
+    {0x068u, Vrc5477PciChannelId::kExternal, Reg::kWindow1, false},
+    {0x06Cu, Vrc5477PciChannelId::kExternal, Reg::kWindow1, true},
+    {0x0D0u, Vrc5477PciChannelId::kInternal, Reg::kWindow0, false},
+    {0x0D4u, Vrc5477PciChannelId::kInternal, Reg::kWindow0, true},
+    {0x0D8u, Vrc5477PciChannelId::kInternal, Reg::kWindow1, false},
+    {0x0DCu, Vrc5477PciChannelId::kInternal, Reg::kWindow1, true},
+    {0x2F0u, Vrc5477PciChannelId::kExternal, Reg::kInitiator0, false},
+    {0x2F4u, Vrc5477PciChannelId::kExternal, Reg::kInitiator0, true},
+    {0x2F8u, Vrc5477PciChannelId::kExternal, Reg::kInitiator1, false},
+    {0x2FCu, Vrc5477PciChannelId::kExternal, Reg::kInitiator1, true},
+    {0x6F0u, Vrc5477PciChannelId::kInternal, Reg::kInitiator0, false},
+    {0x6F4u, Vrc5477PciChannelId::kInternal, Reg::kInitiator0, true},
+    {0x6F8u, Vrc5477PciChannelId::kInternal, Reg::kInitiator1, false},
+    {0x6FCu, Vrc5477PciChannelId::kInternal, Reg::kInitiator1, true},
+};
+
+const ControlRegister* FindControlRegister(uint32_t block_off) {
+    for (const ControlRegister& c : kControlRegisters)
+        if (c.off == block_off) return &c;
+    return nullptr;
+}
+
+constexpr uint8_t kAc97Dev        = Vrc5477PciChannel::DeviceOfIdselLine(29u);
+constexpr uint8_t kUsbFunctionDev = Vrc5477PciChannel::DeviceOfIdselLine(30u);
+constexpr uint8_t kUsbHostDev     = Vrc5477PciChannel::DeviceOfIdselLine(31u);
+
+constexpr uint32_t kAc97IoSize  = 0x80u;
+constexpr uint32_t kOhciMemSize = 0x1000u;
+
+}
 
 REGISTER_SERVICE_AS(Vrc5477Pci, PciHostBridge);
 
-}  /* namespace */
+Vrc5477Pci::Vrc5477Pci(CerfEmulator& emu)
+    : PciHostBridge(emu),
+      external_(emu, "external", kExternalWindowBase, kExternalWindowSize, kExternalIoWindowBase,
+                kExternalIoWindowSize),
+      internal_(emu, "internal", kInternalWindowBase, kInternalWindowSize, kInternalIoWindowBase,
+                kInternalIoWindowSize),
+      ac97_(emu, kAc97Dev, PciBar{~(kAc97IoSize - 1u), PciBar::kIoSpace, 0u}),
+      usb_function_(emu, kUsbFunctionDev, PciBar{}),
+      usb_host_(emu, kUsbHostDev, PciBar{~(kOhciMemSize - 1u), 0u, 0u}) {}
+
+bool Vrc5477Pci::ShouldRegister() {
+    return emu_.Get<BoardContext>().GetSocId() == SocId::Vr5500;
+}
+
+void Vrc5477Pci::OnReady() {
+    internal_.RegisterDevice(&ac97_);
+    internal_.RegisterDevice(&usb_function_);
+    internal_.RegisterDevice(&usb_host_);
+    internal_.RegisterBusResetListener([this] { ResetInternalFunctions(); });
+    ResetInternalFunctions();
+    emu_.Get<GuestCpuReset>().RegisterResetListener([this](ResetLineKind) {
+        external_.ResetControl();
+        internal_.ResetControl();
+        ResetInternalFunctions();
+    });
+}
+
+void Vrc5477Pci::ResetInternalFunctions() {
+    ac97_.Reset();
+    usb_function_.Reset();
+    usb_host_.Reset();
+}
+
+void Vrc5477Pci::RegisterPciDevice(PciDevice* dev) { external_.RegisterDevice(dev); }
+
+void Vrc5477Pci::RegisterBusResetListener(std::function<void()> listener) {
+    external_.RegisterBusResetListener(std::move(listener));
+}
+
+bool Vrc5477Pci::Owns(uint32_t block_off) { return FindControlRegister(block_off) != nullptr; }
+
+bool Vrc5477Pci::IsBusControlHigh(uint32_t block_off) {
+    return block_off == kOffPciCtl0H || block_off == kOffPciCtl1H;
+}
+
+uint32_t Vrc5477Pci::ReadReg(uint32_t block_off) {
+    const ControlRegister* c = FindControlRegister(block_off);
+    if (!c) emu_.Get<Fatal>().Die("VRC5477 PCI: control read off=0x%03X", block_off);
+    if (c->upper) return 0u;
+    return Channel(c->channel).ReadRegister(c->reg);
+}
+
+void Vrc5477Pci::WriteReg(uint32_t block_off, uint32_t value) {
+    const ControlRegister* c = FindControlRegister(block_off);
+    if (!c) emu_.Get<Fatal>().Die("VRC5477 PCI: control write off=0x%03X val=0x%08X", block_off, value);
+    if (c->upper) Channel(c->channel).WriteUpperWord(c->reg, value);
+    else          Channel(c->channel).WriteRegister(c->reg, value);
+}
+
+void Vrc5477Pci::BusControlHighWritten(uint32_t block_off, uint32_t value) {
+    if ((value & kPciCtlHighWarmReset) != 0u) {
+        emu_.Get<Fatal>().Die("VRC5477 PCI: warm reset bit in control-high off=0x%03X val=0x%08X",
+                              block_off, value);
+    }
+    Vrc5477PciChannel& ch = block_off == kOffPciCtl0H ? external_ : internal_;
+    ch.SetResetLine((value & kPciCtlHighColdReset) != 0u);
+}
+
+Vrc5477PciChannel& Vrc5477Pci::Channel(Vrc5477PciChannelId id) {
+    return id == Vrc5477PciChannelId::kExternal ? external_ : internal_;
+}
 
 }

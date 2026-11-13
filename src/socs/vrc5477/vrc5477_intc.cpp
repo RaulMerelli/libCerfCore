@@ -66,11 +66,7 @@ void Vrc5477Intc::AssertSource(uint32_t irq) {
     std::lock_guard<std::mutex> lk(state_mtx_);
     const uint32_t mask = 1u << irq;
     line_level_ |= mask;
-    if ((pending_ & mask) == 0) {
-        pending_ |= mask;
-        emu_.Get<RateProbe>().Inc(RateProbe::Counter::IntcAsserts);
-        NotifyLocked();
-    }
+    LatchLocked(mask);
 }
 
 void Vrc5477Intc::DeassertSource(uint32_t irq) {
@@ -83,6 +79,18 @@ void Vrc5477Intc::DeassertSource(uint32_t irq) {
         emu_.Get<RateProbe>().Inc(RateProbe::Counter::IntcDeasserts);
         NotifyLocked();
     }
+}
+
+void Vrc5477Intc::LatchSource(uint32_t irq) {
+    std::lock_guard<std::mutex> lk(state_mtx_);
+    LatchLocked(1u << irq);
+}
+
+void Vrc5477Intc::LatchLocked(uint32_t mask) {
+    if ((pending_ & mask) != 0) return;
+    pending_ |= mask;
+    emu_.Get<RateProbe>().Inc(RateProbe::Counter::IntcAsserts);
+    NotifyLocked();
 }
 
 uint32_t Vrc5477Intc::ReadReg(uint32_t off) {

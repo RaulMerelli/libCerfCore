@@ -1,10 +1,10 @@
 #include <cerfcore/peripherals/peripheral_base.h>
-#include "../../peripherals/pci/pci_host_bridge.h"
 
-#include <cerfcore/core/cerf_emulator.h>
 #include <cerfcore/boards/board_context.h>
+#include <cerfcore/core/cerf_emulator.h>
 #include "../../cpu/vr5500/vr5500_id.h"
 #include "../../peripherals/peripheral_dispatcher.h"
+#include "vrc5477_pci.h"
 
 #include <cstdint>
 
@@ -12,37 +12,39 @@ namespace cerfcore {
 
 namespace {
 
-constexpr uint32_t kPciIoPaBase = 0x14000000u;   /* BSP_REG_PA_PCI_IO */
-constexpr uint32_t kWindowBase  = 0x14001000u;   /* above the M1535 legacy 4 KB */
-constexpr uint32_t kWindowSize  = 0x01FFF000u;   /* to 0x16000000 (BSP_REG_PCI_IOSIZE=0x02000000) */
-
+template <Vrc5477PciChannelId kChannel>
 class Vrc5477PciIoWindow : public Peripheral {
 public:
     using Peripheral::Peripheral;
 
     bool ShouldRegister() override {
-        auto* bd = emu_.TryGet<BoardContext>();
-        return bd && bd->GetSocId() == SocId::Vr5500;
+        return emu_.Get<BoardContext>().GetSocId() == SocId::Vr5500;
     }
-    void OnReady() override { emu_.Get<PeripheralDispatcher>().Register(this); }
+    void OnReady() override {
+        channel_ = &emu_.Get<Vrc5477Pci>().Channel(kChannel);
+        emu_.Get<PeripheralDispatcher>().Register(this);
+    }
 
-    uint32_t MmioBase() const override { return kWindowBase; }
-    uint32_t MmioSize() const override { return kWindowSize; }
+    uint32_t MmioBase() const override { return channel_->IoWindowBase(); }
+    uint32_t MmioSize() const override { return channel_->IoWindowSize(); }
 
-    uint8_t  ReadByte (uint32_t a) override { return static_cast<uint8_t>(Bridge().WindowIoRead(Io(a), 1)); }
-    uint16_t ReadHalf (uint32_t a) override { return static_cast<uint16_t>(Bridge().WindowIoRead(Io(a), 2)); }
-    uint32_t ReadWord (uint32_t a) override { return Bridge().WindowIoRead(Io(a), 4); }
-    void WriteByte(uint32_t a, uint8_t  v) override { Bridge().WindowIoWrite(Io(a), v, 1); }
-    void WriteHalf(uint32_t a, uint16_t v) override { Bridge().WindowIoWrite(Io(a), v, 2); }
-    void WriteWord(uint32_t a, uint32_t v) override { Bridge().WindowIoWrite(Io(a), v, 4); }
+    uint8_t  ReadByte(uint32_t a) override { return static_cast<uint8_t>(channel_->IoRead(a, 1)); }
+    uint16_t ReadHalf(uint32_t a) override { return static_cast<uint16_t>(channel_->IoRead(a, 2)); }
+    uint32_t ReadWord(uint32_t a) override { return channel_->IoRead(a, 4); }
+    void WriteByte(uint32_t a, uint8_t v) override { channel_->IoWrite(a, v, 1); }
+    void WriteHalf(uint32_t a, uint16_t v) override { channel_->IoWrite(a, v, 2); }
+    void WriteWord(uint32_t a, uint32_t v) override { channel_->IoWrite(a, v, 4); }
 
 private:
-    static uint32_t Io(uint32_t pa) { return pa - kPciIoPaBase; }
-    PciHostBridge& Bridge() { return emu_.Get<PciHostBridge>(); }
+    Vrc5477PciChannel* channel_ = nullptr;
 };
 
-REGISTER_SERVICE(Vrc5477PciIoWindow);
+using Vrc5477ExternalPciIoWindow = Vrc5477PciIoWindow<Vrc5477PciChannelId::kExternal>;
+using Vrc5477InternalPciIoWindow = Vrc5477PciIoWindow<Vrc5477PciChannelId::kInternal>;
 
-}  /* namespace */
+REGISTER_SERVICE(Vrc5477ExternalPciIoWindow);
+REGISTER_SERVICE(Vrc5477InternalPciIoWindow);
+
+}
 
 }

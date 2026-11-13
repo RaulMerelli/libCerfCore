@@ -1,5 +1,6 @@
 #include "../../socs/iop13xx/iop13xx_pci_config.h"
 
+#include "../../peripherals/pci/pci_bar.h"
 #include "../../peripherals/siemens_ertec400/siemens_simatic_mp377_ertec400.h"
 #include "../../peripherals/silicon_motion_sm501/siemens_simatic_mp377_sm501.h"
 #include <cerfcore/boards/board_context.h>
@@ -34,9 +35,6 @@ public:
     void Reset() {
         BuildSm501Config();
         BuildErtec400Config();
-        fb_bar_probe_ = false;
-        regs_bar_probe_ = false;
-        ertec_bar_probe_.fill(false);
     }
 
     uint32_t ReadPrimary(uint32_t occar) override {
@@ -71,20 +69,14 @@ public:
     Iop13xxPciMemoryMapResult MapMemoryBar(uint32_t pci_address, uint32_t size,
                                            uint32_t& model_address) const override {
         if ((sm501_cfg_[0x01] & 0x00000002u) != 0u) {
-            if (!fb_bar_probe_ && MapBar(pci_address, size, sm501_cfg_[0x04],
-                                        siemens_simatic_mp377::kSm501FbBytes,
-                                        siemens_simatic_mp377::kSm501FbBarPa, model_address))
+            if (MapPciBar(fb_bar_, pci_address, size, siemens_simatic_mp377::kSm501FbBarPa, model_address))
                 return Iop13xxPciMemoryMapResult::kMapped;
-            if (!regs_bar_probe_ && MapBar(pci_address, size, sm501_cfg_[0x05],
-                                          siemens_simatic_mp377::kSm501RegsBytes,
-                                          siemens_simatic_mp377::kSm501RegsBarPa, model_address))
+            if (MapPciBar(regs_bar_, pci_address, size, siemens_simatic_mp377::kSm501RegsBarPa, model_address))
                 return Iop13xxPciMemoryMapResult::kMapped;
         }
         if ((ertec_cfg_[0x01] & 0x00000002u) != 0u) {
             for (uint32_t reg = 0x04u; reg <= 0x09u; ++reg) {
-                if (ertec_bar_probe_[reg - 0x04u]) continue;
-                if (MapBar(pci_address, size, ertec_cfg_[reg], Ertec400BarSize(reg),
-                           Ertec400ModelBase(reg), model_address))
+                if (MapPciBar(ertec_bars_[reg - 0x04u], pci_address, size, Ertec400ModelBase(reg), model_address))
                     return Iop13xxPciMemoryMapResult::kMapped;
             }
         }
@@ -95,19 +87,19 @@ public:
     void SaveState(StateWriter& writer) override {
         writer.WriteBytes("sm501_cfg", sm501_cfg_.data(), sm501_cfg_.size() * sizeof(sm501_cfg_[0]));
         writer.WriteBytes("ertec_cfg", ertec_cfg_.data(), ertec_cfg_.size() * sizeof(ertec_cfg_[0]));
-        writer.Write("fb_bar_probe", fb_bar_probe_);
-        writer.Write("regs_bar_probe", regs_bar_probe_);
-        for (bool probe : ertec_bar_probe_)
-            writer.Write("probe", probe);
+        StateWriteField bar_field(writer);
+        PciBar::Visit(fb_bar_, bar_field);
+        PciBar::Visit(regs_bar_, bar_field);
+        for (PciBar& bar : ertec_bars_) PciBar::Visit(bar, bar_field);
     }
 
     void RestoreState(StateReader& reader) override {
         reader.ReadBytes("sm501_cfg", sm501_cfg_.data(), sm501_cfg_.size() * sizeof(sm501_cfg_[0]));
         reader.ReadBytes("ertec_cfg", ertec_cfg_.data(), ertec_cfg_.size() * sizeof(ertec_cfg_[0]));
-        reader.Read("fb_bar_probe", fb_bar_probe_);
-        reader.Read("regs_bar_probe", regs_bar_probe_);
-        for (bool& probe : ertec_bar_probe_)
-            reader.Read("probe", probe);
+        StateReadField bar_field(reader);
+        PciBar::Visit(fb_bar_, bar_field);
+        PciBar::Visit(regs_bar_, bar_field);
+        for (PciBar& bar : ertec_bars_) PciBar::Visit(bar, bar_field);
     }
 
 private:
@@ -115,17 +107,13 @@ private:
 
     /* PCI Local Bus Specification Revision 3.0, section 6.2.5.1. */
     uint32_t Sm501ConfigRead(uint32_t reg) {
-        if (reg == 0x04 && fb_bar_probe_)
-            return siemens_simatic_mp377::kSm501PciFbBarSizeMask | siemens_simatic_mp377::kSm501PciFbBarFlags;
-        if (reg == 0x05 && regs_bar_probe_)
-            return siemens_simatic_mp377::kSm501PciRegsBarSizeMask | siemens_simatic_mp377::kSm501PciRegsBarFlags;
+        if (reg == 0x04) return fb_bar_.Read();
+        if (reg == 0x05) return regs_bar_.Read();
         return sm501_cfg_[reg];
     }
 
     uint32_t Ertec400ConfigRead(uint32_t reg) {
-        if (reg >= 0x04u && reg <= 0x09u && ertec_bar_probe_[reg - 0x04u]) {
-            return Ertec400BarMask(reg);
-        }
+        if (reg >= 0x04u && reg <= 0x09u) return ertec_bars_[reg - 0x04u].Read();
         return ertec_cfg_[reg];
     }
 
@@ -160,6 +148,13 @@ private:
         return true;
     }
 
+    static bool MapPciBar(const PciBar& bar, uint32_t address, uint32_t access_size, uint32_t model_base,
+                          uint32_t& model_address) {
+        if (access_size == 0u || !bar.Decodes(address) || !bar.Decodes(address + access_size - 1u)) return false;
+        model_address = model_base + (address - bar.base);
+        return true;
+    }
+
     static bool InModelAperture(uint32_t address, uint32_t access_size) {
         uint32_t ignored = 0u;
         if (MapBar(address, access_size, siemens_simatic_mp377::kSm501FbBarPa,
@@ -173,18 +168,18 @@ private:
         return false;
     }
 
-    bool fb_bar_probe_ = false;
-    bool regs_bar_probe_ = false;
-    std::array<bool, 6> ertec_bar_probe_{};
-
     void BuildSm501Config() {
         sm501_cfg_.fill(0u);
         sm501_cfg_[0x00] = siemens_simatic_mp377::kSm501PciDeviceVendorDword;
         sm501_cfg_[0x01] = siemens_simatic_mp377::kSm501PciCommandStatusDword;
         sm501_cfg_[0x02] = siemens_simatic_mp377::kSm501PciClassDisplayDword;
         sm501_cfg_[0x03] = siemens_simatic_mp377::kSm501PciHeaderTypeDword;
-        sm501_cfg_[0x04] = siemens_simatic_mp377::kSm501PciFbBarDword;
-        sm501_cfg_[0x05] = siemens_simatic_mp377::kSm501PciRegsBarDword;
+        fb_bar_ = PciBar{siemens_simatic_mp377::kSm501PciFbBarSizeMask, siemens_simatic_mp377::kSm501PciFbBarFlags,
+                         siemens_simatic_mp377::kSm501PciFbBarDword & siemens_simatic_mp377::kSm501PciFbBarSizeMask};
+        regs_bar_ = PciBar{siemens_simatic_mp377::kSm501PciRegsBarSizeMask,
+                           siemens_simatic_mp377::kSm501PciRegsBarFlags,
+                           siemens_simatic_mp377::kSm501PciRegsBarDword &
+                               siemens_simatic_mp377::kSm501PciRegsBarSizeMask};
         sm501_cfg_[0x0B] = siemens_simatic_mp377::kSm501PciSubsystemDword;
         sm501_cfg_[0x0D] = siemens_simatic_mp377::kSm501PciCapabilityPointerDword;
         sm501_cfg_[0x0F] = siemens_simatic_mp377::kSm501PciInterruptPinIntaLine0Dword;
@@ -192,18 +187,13 @@ private:
 
     void BuildErtec400Config() {
         ertec_cfg_.fill(0u);
-        ertec_bar_probe_.fill(false);
         /* siemens_mp377_v1040 eddertec400.dll sub_28E1CA8. */
         ertec_cfg_[0x00] = 0x4026110Au;
         ertec_cfg_[0x01] = 0x02000007u;
         ertec_cfg_[0x02] = 0x02000000u;
         ertec_cfg_[0x03] = 0x00000000u;
-        ertec_cfg_[0x04] = siemens_simatic_mp377::kErtecBar0Base;
-        ertec_cfg_[0x05] = siemens_simatic_mp377::kErtecBar1Base;
-        ertec_cfg_[0x06] = siemens_simatic_mp377::kErtecBar2Base;
-        ertec_cfg_[0x07] = siemens_simatic_mp377::kErtecBar3Base;
-        ertec_cfg_[0x08] = siemens_simatic_mp377::kErtecBar4Base;
-        ertec_cfg_[0x09] = siemens_simatic_mp377::kErtecBar5Base;
+        for (uint32_t reg = 0x04u; reg <= 0x09u; ++reg)
+            ertec_bars_[reg - 0x04u] = PciBar{Ertec400BarMask(reg), 0u, Ertec400ModelBase(reg)};
         ertec_cfg_[0x0B] = 0x4026110Au;
         ertec_cfg_[0x0F] = 0x00000100u;
     }
@@ -221,8 +211,7 @@ private:
         case 0x07:
         case 0x08:
         case 0x09:
-            ertec_bar_probe_[reg - 0x04u] = value == 0xFFFFFFFFu;
-            if (!ertec_bar_probe_[reg - 0x04u]) ertec_cfg_[reg] = value & Ertec400BarMask(reg);
+            ertec_bars_[reg - 0x04u].Write(value);
             return true;
         case 0x01:
         case 0x03: ertec_cfg_[reg] = (ertec_cfg_[reg] & 0xFFFF0000u) | (value & 0x0000FFFFu); return true;
@@ -244,16 +233,10 @@ private:
         case 0x01: sm501_cfg_[reg] = (sm501_cfg_[reg] & 0xFFFF0000u) | (value & 0x0000FFFFu); return true;
         case 0x03: sm501_cfg_[reg] = (sm501_cfg_[reg] & 0xFFFF0000u) | (value & 0x0000FFFFu); return true;
         case 0x04:
-            fb_bar_probe_ = (value == 0xFFFFFFFFu);
-            if (!fb_bar_probe_)
-                sm501_cfg_[reg] = (value & siemens_simatic_mp377::kSm501PciFbBarSizeMask) |
-                                  siemens_simatic_mp377::kSm501PciFbBarFlags;
+            fb_bar_.Write(value);
             return true;
         case 0x05:
-            regs_bar_probe_ = (value == 0xFFFFFFFFu);
-            if (!regs_bar_probe_)
-                sm501_cfg_[reg] = (value & siemens_simatic_mp377::kSm501PciRegsBarSizeMask) |
-                                  siemens_simatic_mp377::kSm501PciRegsBarFlags;
+            regs_bar_.Write(value);
             return true;
         case 0x06:
         case 0x07:
@@ -271,6 +254,9 @@ private:
 
     std::array<uint32_t, 64> sm501_cfg_{};
     std::array<uint32_t, 64> ertec_cfg_{};
+    PciBar                   fb_bar_;
+    PciBar                   regs_bar_;
+    std::array<PciBar, 6>    ertec_bars_{};
 };
 
 REGISTER_SERVICE_AS(SiemensSimaticMp377PciConfig, Iop13xxPciConfig);

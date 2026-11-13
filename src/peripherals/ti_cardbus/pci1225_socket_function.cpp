@@ -50,7 +50,6 @@ constexpr uint8_t kPwrVppField      = 0x03u;
 constexpr uint8_t kPwrVpp12         = 0x02u;
 constexpr uint8_t kIfsBvd1          = 0x01u;
 
-constexpr uint32_t kSocketBarSize    = 0x1000u;
 constexpr uint32_t kExCaWindowBase   = 0x800u;
 constexpr uint32_t kExCaLastOffset   = 0x44u;
 constexpr uint32_t kZoomVideoCardLines = 0xFu << 22;
@@ -267,8 +266,7 @@ Pci1225CardPins Pci1225SocketFunction::CardPins() const {
 
 bool Pci1225SocketFunction::SocketBarHit(uint32_t addr) const {
     std::lock_guard<std::mutex> lk(mtx_);
-    const uint32_t base = config_.SocketBarBase();
-    return config_.MemorySpaceEnabled() && base && addr >= base && addr < base + kSocketBarSize;
+    return config_.MemorySpaceEnabled() && config_.SocketBarDecodes(addr);
 }
 
 bool Pci1225SocketFunction::CardMemHit(uint32_t addr) const {

@@ -7,10 +7,6 @@ namespace cerfcore {
 class StateWriter;
 class StateReader;
 
-/* A device on a PCI bus, routed to by a PciHostBridge. The device owns its 256-byte
-   type-0 config space (including BARs) and the memory its BARs map into PCI memory
-   space. Config access is dword-granular (the VRC5477 OAL issues dword window cycles;
-   the bridge does read-modify-write for sub-dword writes). */
 class PciDevice {
 public:
     virtual ~PciDevice() = default;
@@ -22,7 +18,6 @@ public:
     virtual void RestoreState(StateReader&) {}
     virtual void PostRestore() {}
 
-    /* Location on bus 0 (the only bus the VRC5477 external host bridge drives). */
     virtual uint8_t PciDev() const = 0;
     virtual uint8_t PciFnc() const = 0;
 

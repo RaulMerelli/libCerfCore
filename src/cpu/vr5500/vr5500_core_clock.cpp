@@ -25,7 +25,7 @@ public:
 
     uint64_t CyclesPerCountTick() const override { return kPClockPerCountTick; }
 
-    uint32_t ConfigEc() const override { return 0u; }
+    uint32_t ConfigEc() const override { return emu_.Get<Vr5500BoardClock>().DivMode(); }
 };
 
 }

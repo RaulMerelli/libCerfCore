@@ -36,11 +36,17 @@ uint64_t ReloadDownCounter::NextFlag() const {
     return first + ((consumed_ - first) / Period() + 1u) * Period();
 }
 
+uint64_t ReloadDownCounter::FlagsThrough(uint64_t tick) const {
+    if (!running_ || tick <= consumed_) return 0u;
+    const uint64_t next = NextFlag();
+    if (tick < next) return 0u;
+    return 1u + (tick - next) / Period();
+}
+
 void ReloadDownCounter::Advance(uint64_t tick) {
     if (!running_ || tick <= consumed_) return;
+    if (FlagsThrough(tick) != 0u) flag_ = true;
     const uint64_t period = Period();
-    const uint64_t first  = FirstFlag();
-    if (tick >= first && first + (tick - first) / period * period > consumed_) flag_ = true;
     if (tick >= reload_) {
         anchor_ = reload_ + (tick - reload_) / period * period;
         value_  = constant_;

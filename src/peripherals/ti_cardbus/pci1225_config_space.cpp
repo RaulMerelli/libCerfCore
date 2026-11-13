@@ -14,7 +14,6 @@ constexpr uint32_t kCapabilityPointer = 0xA0u;
 constexpr uint32_t kSecondaryStatus   = 0x0200u;
 
 constexpr uint16_t kCommandWritable   = 0x0147u;
-constexpr uint32_t kSocketBarWritable = 0xFFFFF000u;
 constexpr uint32_t kMemWindowWritable = 0xFFFFF000u;
 constexpr uint32_t kIoBaseWritable    = 0xFFFFFFFCu;
 constexpr uint32_t kIoLimitWritable   = 0x0000FFFCu;
@@ -150,7 +149,7 @@ void Pci1225ConfigSpace::Reset() {
     command_     = 0u;
     cache_line_  = 0u;
     latency_     = 0u;
-    socket_bar_  = 0u;
+    socket_bar_.base = 0u;
     bus_numbers_ = 0u;
     for (int i = 0; i < 2; ++i) {
         mem_base_[i]  = 0u;
@@ -218,7 +217,7 @@ bool Pci1225ConfigSpace::Read(uint32_t reg, uint32_t* value) {
             *value = kHeaderTypeBist | (static_cast<uint32_t>(latency_) << 8) | cache_line_;
             return true;
         case 0x10:
-            *value = socket_bar_;
+            *value = socket_bar_.Read();
             return true;
         case 0x14:
             *value = (kSecondaryStatus << 16) | kCapabilityPointer;
@@ -300,7 +299,7 @@ const char* Pci1225ConfigSpace::Write(uint32_t reg, uint32_t value) {
             latency_    = static_cast<uint8_t>(value >> 8);
             return nullptr;
         case 0x10:
-            socket_bar_ = value & kSocketBarWritable;
+            socket_bar_.Write(value);
             return nullptr;
         case 0x18:
             bus_numbers_ = value;
@@ -410,7 +409,7 @@ void Pci1225ConfigSpace::SaveState(StateWriter& w) const {
     w.Write("cfg_command", command_);
     w.Write("cfg_cache_line", cache_line_);
     w.Write("cfg_latency", latency_);
-    w.Write("cfg_socket_bar", socket_bar_);
+    w.Write("cfg_socket_bar", socket_bar_.base);
     w.Write("cfg_bus_numbers", bus_numbers_);
     w.WriteBytes("cfg_mem_base", mem_base_, sizeof(mem_base_));
     w.WriteBytes("cfg_mem_limit", mem_limit_, sizeof(mem_limit_));
@@ -433,7 +432,7 @@ void Pci1225ConfigSpace::RestoreState(StateReader& r) {
     r.Read("cfg_command", command_);
     r.Read("cfg_cache_line", cache_line_);
     r.Read("cfg_latency", latency_);
-    r.Read("cfg_socket_bar", socket_bar_);
+    r.Read("cfg_socket_bar", socket_bar_.base);
     r.Read("cfg_bus_numbers", bus_numbers_);
     r.ReadBytes("cfg_mem_base", mem_base_, sizeof(mem_base_));
     r.ReadBytes("cfg_mem_limit", mem_limit_, sizeof(mem_limit_));

@@ -17,6 +17,7 @@ public:
     }
 
     uint64_t PClockHz() const override { return 400000000u; }
+    uint32_t DivMode() const override { return 0b100u; }
 };
 
 }

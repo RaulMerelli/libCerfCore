@@ -1,5 +1,6 @@
 #pragma once
 
+#include "../pci/pci_bar.h"
 #include "pci1225_interrupt_terminals.h"
 
 #include <cstdint>
@@ -45,7 +46,8 @@ public:
     const Pci1225InterruptTerminals& Terminals() const { return terminals_; }
     bool     MemorySpaceEnabled() const { return (command_ & kCmdMemEnable) != 0u && !PoweredDown(); }
     bool     IoSpaceEnabled() const     { return (command_ & kCmdIoEnable) != 0u && !PoweredDown(); }
-    uint32_t SocketBarBase() const      { return socket_bar_; }
+    uint32_t SocketBarBase() const      { return socket_bar_.base; }
+    bool     SocketBarDecodes(uint32_t addr) const { return socket_bar_.Decodes(addr); }
 
     bool FunctionalInterruptsViaExca() const { return (bridge_control_ & kBcIntr) != 0u; }
     bool CscToPciOnZeroCscSelect() const     { return (diagnostic_ & kDiagCsc) != 0u; }
@@ -62,6 +64,7 @@ public:
     void RestoreState(StateReader& r);
 
 private:
+    static constexpr uint32_t kSocketBarWritable = 0xFFFFF000u;
     static constexpr uint16_t kCmdIoEnable  = 0x0001u;
     static constexpr uint16_t kCmdMemEnable = 0x0002u;
     static constexpr uint16_t kBcIntr       = 0x0080u;
@@ -77,7 +80,7 @@ private:
     uint16_t command_        = 0u;
     uint8_t  cache_line_     = 0u;
     uint8_t  latency_        = 0u;
-    uint32_t socket_bar_     = 0u;
+    PciBar   socket_bar_{kSocketBarWritable, 0u, 0u};
     uint32_t bus_numbers_    = 0u;
     uint32_t mem_base_[2]    = {};
     uint32_t mem_limit_[2]   = {};

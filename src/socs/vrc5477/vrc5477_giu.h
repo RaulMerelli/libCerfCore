@@ -2,6 +2,7 @@
 
 #include <cerfcore/peripherals/peripheral_base.h>
 
+#include <cstddef>
 #include <cstdint>
 
 namespace cerfcore {
@@ -10,6 +11,8 @@ class Vrc5477Intc;
 
 class Vrc5477Giu : public Peripheral {
 public:
+    static constexpr size_t kStoredRegs = 8;
+
     using Peripheral::Peripheral;
 
     bool ShouldRegister() override;
@@ -29,10 +32,12 @@ public:
 private:
     void DriveSource();
 
-    Vrc5477Intc* intc_    = nullptr;
-    bool         input_   = false;
-    bool         latched_ = false;
-    bool         line_    = false;
+    Vrc5477Intc* intc_                 = nullptr;
+    bool         input_                = false;
+    bool         latched_              = false;
+    bool         line_                 = false;
+    uint32_t     stored_[kStoredRegs]  = {};
+    bool         stored_written_       = false;
 };
 
 }

@@ -1,3 +1,4 @@
+#include "../pci/pci_bar.h"
 #include "../pci/pci_device.h"
 #include "../pci/pci_host_bridge.h"
 #include "ati_ragexl_display.h"
@@ -69,19 +70,6 @@ constexpr uint32_t kRegCurHorzVertPosn = 0x46Cu;
 constexpr uint32_t kRegCurHorzVertOff  = 0x470u;
 constexpr uint32_t kRegGenTestCntl     = 0x4D0u;
 constexpr uint32_t kHwCursorEnable     = 0x80u;
-struct Bar {
-    uint32_t size_mask = 0;   /* e.g. 0xFF800000 for 8 MB; 0 = BAR not implemented */
-    uint32_t flags     = 0;   /* low type/prefetch bits OR'd into reads */
-    uint32_t base      = 0;   /* written value masked to size; bus driver assigns it */
-    uint32_t Read() const { return size_mask ? (base | flags) : 0u; }
-    void Write(uint32_t v) { if (size_mask) base = v & size_mask; }
-    template <typename F>
-    static constexpr void Visit(Bar& b, F& field) {
-        field("bar_size_mask", b.size_mask);
-        field("bar_flags", b.flags);
-        field("bar_base", b.base);
-    }
-};
 
 class AtiRageXl : public PciDevice, public RageXlDisplay {
 public:
@@ -95,17 +83,21 @@ public:
         fb_.assign(kFbSize, 0);
         bars_[0] = { ~(kFbSize - 1u),   kBarMemPrefetch, 0 };   /* BAR0: framebuffer */
         bars_[2] = { ~(kMmioSize - 1u), 0u,              0 };   /* BAR2: MMIO regs */
-        emu_.Get<GuestCpuReset>().RegisterResetListener([this](ResetLineKind) {
-            command_ = 0;
-            for (Bar& b : bars_) b.base = 0;
-            std::memset(regs_, 0, sizeof(regs_));
-            clock_cntl_ = 0;
-            std::memset(pll_, 0, sizeof(pll_));
-            crtc_vline_ = 0;
-            signaled_w_ = 0;
-            signaled_h_ = 0;
-        });
-        emu_.Get<PciHostBridge>().RegisterPciDevice(this);
+        emu_.Get<GuestCpuReset>().RegisterResetListener([this](ResetLineKind) { ResetChip(); });
+        auto& bridge = emu_.Get<PciHostBridge>();
+        bridge.RegisterBusResetListener([this] { ResetChip(); });
+        bridge.RegisterPciDevice(this);
+    }
+
+    void ResetChip() {
+        command_ = 0;
+        for (PciBar& b : bars_) b.base = 0;
+        std::memset(regs_, 0, sizeof(regs_));
+        clock_cntl_ = 0;
+        std::memset(pll_, 0, sizeof(pll_));
+        crtc_vline_ = 0;
+        signaled_w_ = 0;
+        signaled_h_ = 0;
     }
 
     uint8_t PciDev() const override { return kPciDev; }
@@ -143,11 +135,11 @@ public:
 
     void SaveState(StateWriter& w) override {
         w.Write("command", command_);
-        static_assert(StateVisitCoversAllBytes<Bar>(
-                          [](Bar& b, StateFieldBytes& f) { Bar::Visit(b, f); }),
-                      "Bar::Visit must name or skip every field of Bar");
+        static_assert(StateVisitCoversAllBytes<PciBar>(
+                          [](PciBar& b, StateFieldBytes& f) { PciBar::Visit(b, f); }),
+                      "PciBar::Visit must name or skip every field of PciBar");
         StateWriteField bar_field(w);
-        for (Bar& b : bars_) Bar::Visit(b, bar_field);
+        for (PciBar& b : bars_) PciBar::Visit(b, bar_field);
         w.WriteBytes("fb", fb_.data(), fb_.size());
         w.WriteBytes("regs", regs_, sizeof(regs_));
         w.Write("clock_cntl", clock_cntl_);
@@ -159,7 +151,7 @@ public:
     void RestoreState(StateReader& r) override {
         r.Read("command", command_);
         StateReadField bar_field(r);
-        for (Bar& b : bars_) Bar::Visit(b, bar_field);
+        for (PciBar& b : bars_) PciBar::Visit(b, bar_field);
         r.ReadBytes("fb", fb_.data(), fb_.size());
         r.ReadBytes("regs", regs_, sizeof(regs_));
         r.Read("clock_cntl", clock_cntl_);
@@ -361,10 +353,10 @@ private:
 
     bool MemEnabled() const { return (command_ & kCmdMemEnable) != 0; }
     bool FbHit(uint32_t a) const {
-        return MemEnabled() && bars_[0].base && a >= bars_[0].base && a < bars_[0].base + kFbSize;
+        return MemEnabled() && bars_[0].Decodes(a);
     }
     bool MmioHit(uint32_t a) const {
-        return MemEnabled() && bars_[2].base && a >= bars_[2].base && a < bars_[2].base + kMmioSize;
+        return MemEnabled() && bars_[2].Decodes(a);
     }
     uint32_t FbRead(uint32_t off, unsigned size) const {
         uint32_t v = 0;
@@ -375,7 +367,7 @@ private:
         for (unsigned i = 0; i < size && off + i < fb_.size(); ++i) fb_[off + i] = uint8_t(value >> (i * 8));
     }
     uint32_t command_ = 0;
-    Bar bars_[3];
+    PciBar bars_[3];
     std::vector<uint8_t> fb_;
     uint8_t  regs_[4096] = {};
     uint32_t clock_cntl_ = 0;
