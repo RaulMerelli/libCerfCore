@@ -1579,6 +1579,7 @@
         "width": 640,
         "height": 240
       },
+      "ga_window_size": 50331648,
       "rom_placing_mode": "flat_container"
     },
     {
@@ -3023,7 +3024,8 @@
           "default": "16mb",
           "values": ["4mb", "8mb", "12mb", "16mb", "32mb"]
         }
-      }
+      },
+      "ga_color_depth": 8
     },
     {
       "id": "hp_620lx_japan",
@@ -3038,7 +3040,8 @@
           "default": "16mb",
           "values": ["4mb", "8mb", "12mb", "16mb", "32mb"]
         }
-      }
+      },
+      "ga_color_depth": 8
     },
     {
       "id": "hp_660lx",
@@ -3053,7 +3056,8 @@
           "default": "32mb",
           "values": ["4mb", "8mb", "12mb", "16mb", "32mb"]
         }
-      }
+      },
+      "ga_color_depth": 8
     },
     {
       "id": "jornada_720",

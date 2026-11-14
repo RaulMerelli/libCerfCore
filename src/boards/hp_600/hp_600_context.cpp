@@ -12,6 +12,7 @@ public:
     using BoardContext::BoardContext;
 
     std::string_view GetBoardFamilyId() const override { return BoardFamilyId::Hp600; }
+    uint32_t         GuestAdditionsWindowBase() const override { return 0x09000000u; }
 };
 
 }

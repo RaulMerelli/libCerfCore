@@ -29,6 +29,7 @@ std::string GuestAdditionsBinaries::ArchDir() {
         return cpu == PeImage::kMachineMipsFpu ? "mips4" : "mips1";
     }
     if (arch == CpuArch::kArm) return emu_.Get<ArmProcessorConfig>().HasThumb() ? "arm_thumb" : "arm";
+    if (arch == CpuArch::kSh) return "sh3";
     emu_.Get<Fatal>().Die("GuestAdditions: no guest-additions build for the %s architecture",
                           CpuArchName(arch));
 }

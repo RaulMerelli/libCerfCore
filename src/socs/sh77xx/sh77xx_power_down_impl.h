@@ -105,6 +105,18 @@ public:
         if (exited_) wdt_->CountAfterStandby();
     }
 
+    void SaveState(StateWriter& w) override {
+        ModuleStopRegister<Soc, M, Sh77xxStbcr>::SaveState(w);
+        w.Write("standby_wake_detected", detected_);
+        w.Write("standby_exited", exited_);
+    }
+
+    void RestoreState(StateReader& r) override {
+        ModuleStopRegister<Soc, M, Sh77xxStbcr>::RestoreState(r);
+        r.Read("standby_wake_detected", detected_);
+        r.Read("standby_exited", exited_);
+    }
+
 protected:
     void AfterStore(uint32_t i) override {
         ModuleStopRegister<Soc, M, Sh77xxStbcr>::AfterStore(i);
