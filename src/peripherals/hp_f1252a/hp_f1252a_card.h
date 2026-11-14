@@ -9,12 +9,12 @@
 
 namespace cerfcore {
 
-class HpPalmtopVgaCard : public PcmciaCard {
+class HpF1252aCard : public PcmciaCard {
 public:
-    static constexpr const char* kDisplayName = "HP Palmtop VGA (F1252A)";
+    static constexpr const char* kDisplayName = "HP VGA out PC Card (F1252A)";
 
-    explicit HpPalmtopVgaCard(CerfEmulator& emu);
-    ~HpPalmtopVgaCard() override;
+    explicit HpF1252aCard(CerfEmulator& emu);
+    ~HpF1252aCard() override;
 
     std::string DisplayName() const override { return kDisplayName; }
     PcmciaVoltageSense VoltageSense() const override { return { false, false, false }; }

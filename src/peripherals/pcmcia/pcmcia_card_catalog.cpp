@@ -5,8 +5,8 @@
 #include <cerfcore/core/log.h>
 #include "../compactflash/compactflash_card.h"
 #include "../compactflash/compactflash_insert_entry.h"
-#include "../hp_palmtop_vga/hp_palmtop_vga_card.h"
-#include "../hp_palmtop_vga/hp_palmtop_vga_insert_entry.h"
+#include "../hp_f1252a/hp_f1252a_card.h"
+#include "../hp_f1252a/hp_f1252a_insert_entry.h"
 #include "../realtek_rtl8019/rtl8019.h"
 #include "../serial/serial_forward_insert_entry.h"
 #include "../serial/serial_modem_insert_entry.h"
@@ -40,9 +40,9 @@ void PcmciaCardCatalog::OnReady() {
 
     Entry hpvga;
     hpvga.id           = kIdHpVga;
-    hpvga.display_name = HpPalmtopVgaCard::kDisplayName;
+    hpvga.display_name = HpF1252aCard::kDisplayName;
     hpvga.build_entry = [this](CardInserter inserter) {
-        return emu_.Get<HpPalmtopVgaInsertEntry>().BuildInsertEntry(std::move(inserter));
+        return emu_.Get<HpF1252aInsertEntry>().BuildInsertEntry(std::move(inserter));
     };
 
     Entry serial;
@@ -76,7 +76,7 @@ std::unique_ptr<PcmciaCard> PcmciaCardCatalog::TryCreate(const std::string& id,
     if (id == Rtl8019::kSaveId)    return std::make_unique<Rtl8019>(emu_, Rtl8019::Supply::k5V);
     if (id == Rtl8019::kSaveId3V3) return std::make_unique<Rtl8019>(emu_, Rtl8019::Supply::k3V3);
     if (id == "cf")         return std::make_unique<CompactFlashCard>(emu_, binding);
-    if (id == kIdHpVga)     return std::make_unique<HpPalmtopVgaCard>(emu_);
+    if (id == kIdHpVga)     return std::make_unique<HpF1252aCard>(emu_);
     if (id == kIdSerial)    return std::make_unique<SerialPcCard>(emu_);
     if (id == kIdSerialFwd) return std::make_unique<SerialPcCard>(emu_, binding);
     return nullptr;

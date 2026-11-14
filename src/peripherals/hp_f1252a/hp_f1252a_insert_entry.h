@@ -6,7 +6,7 @@
 
 namespace cerfcore {
 
-class HpPalmtopVgaInsertEntry : public Service {
+class HpF1252aInsertEntry : public Service {
 public:
     using Service::Service;
 

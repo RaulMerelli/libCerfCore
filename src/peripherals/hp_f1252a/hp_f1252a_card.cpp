@@ -1,4 +1,4 @@
-#include "hp_palmtop_vga_card.h"
+#include "hp_f1252a_card.h"
 
 #include "../pcmcia/pcmcia_slot.h"
 
@@ -97,10 +97,10 @@ bool IsDetectProbeWrite(uint32_t offset, uint8_t value) {
 
 }  /* namespace */
 
-HpPalmtopVgaCard::HpPalmtopVgaCard(CerfEmulator& emu) : PcmciaCard(emu), controller_(emu) {}
-HpPalmtopVgaCard::~HpPalmtopVgaCard() { if (window_) window_->Close(); }
+HpF1252aCard::HpF1252aCard(CerfEmulator& emu) : PcmciaCard(emu), controller_(emu) {}
+HpF1252aCard::~HpF1252aCard() { if (window_) window_->Close(); }
 
-void HpPalmtopVgaCard::OnInserted() {
+void HpF1252aCard::OnInserted() {
     controller_.Attach();
     PcmciaSlot*    slot = slot_;
     const uint64_t id   = card_id_;
@@ -111,23 +111,23 @@ void HpPalmtopVgaCard::OnInserted() {
     last_h_ = 480u;
 }
 
-void HpPalmtopVgaCard::OnShutdown() {
+void HpF1252aCard::OnShutdown() {
     if (window_) window_->Close();
 }
 
-void HpPalmtopVgaCard::PowerOn() {
+void HpF1252aCard::PowerOn() {
     controller_.PowerOnReset();
 #if CERF_DEV_MODE
     LOG(Periph, "[HpVga] PowerOn\n");
 #endif
 }
-void HpPalmtopVgaCard::PowerOff() {
+void HpF1252aCard::PowerOff() {
 #if CERF_DEV_MODE
     LOG(Periph, "[HpVga] PowerOff\n");
 #endif
 }
 
-void HpPalmtopVgaCard::SyncWindowToMode() {
+void HpF1252aCard::SyncWindowToMode() {
     uint32_t w, h, bpp;
     if (!controller_.CurrentMode(w, h, bpp)) return;
     if (w == last_w_ && h == last_h_) return;
@@ -137,22 +137,22 @@ void HpPalmtopVgaCard::SyncWindowToMode() {
     LOG(Lcd, "[HpVga] mode %ux%u %ubpp\n", w, h, bpp);
 }
 
-uint8_t HpPalmtopVgaCard::ReadAttribute8(uint32_t offset) {
+uint8_t HpF1252aCard::ReadAttribute8(uint32_t offset) {
     if (offset < kCisSize * 2u) return kCisData[offset / 2u];
     if (offset - kMagicBase < kMagicLen) return kMagic[offset - kMagicBase];
     HaltUnmapped("attribute", "read", offset);
 }
 
-void HpPalmtopVgaCard::WriteAttribute8(uint32_t offset, uint8_t value) {
-    emu_.Get<Fatal>().Die("HpPalmtopVgaCard: attribute write 0x%02X at 0x%06X", value, offset);
+void HpF1252aCard::WriteAttribute8(uint32_t offset, uint8_t value) {
+    emu_.Get<Fatal>().Die("HpF1252aCard: attribute write 0x%02X at 0x%06X", value, offset);
 }
 
-void HpPalmtopVgaCard::HaltUnmapped(const char* space, const char* access, uint32_t offset) {
-    emu_.Get<Fatal>().Die("HpPalmtopVgaCard: %s %s at unmapped card offset 0x%06X", space, access,
+void HpF1252aCard::HaltUnmapped(const char* space, const char* access, uint32_t offset) {
+    emu_.Get<Fatal>().Die("HpF1252aCard: %s %s at unmapped card offset 0x%06X", space, access,
                           offset);
 }
 
-uint8_t HpPalmtopVgaCard::ReadCommon8(uint32_t offset) {
+uint8_t HpF1252aCard::ReadCommon8(uint32_t offset) {
     if (offset < kRegEnd) {
         if (IsDetectProbeRead(offset)) return slot_->UndrivenDataLane();
         return controller_.ReadReg8(offset);
@@ -163,7 +163,7 @@ uint8_t HpPalmtopVgaCard::ReadCommon8(uint32_t offset) {
     HaltUnmapped("common", "read", offset);
 }
 
-void HpPalmtopVgaCard::WriteCommon8(uint32_t offset, uint8_t value) {
+void HpF1252aCard::WriteCommon8(uint32_t offset, uint8_t value) {
     if (offset < kRegEnd) {
         if (IsDetectProbeWrite(offset, value)) return;
         controller_.WriteReg8(offset, value);
@@ -179,7 +179,7 @@ void HpPalmtopVgaCard::WriteCommon8(uint32_t offset, uint8_t value) {
     HaltUnmapped("common", "write", offset);
 }
 
-uint16_t HpPalmtopVgaCard::ReadCommon16(uint32_t offset) {
+uint16_t HpF1252aCard::ReadCommon16(uint32_t offset) {
     uint32_t at = 0u;
     if (offset >= kRegEnd && controller_.LinearOffset(offset, at) &&
         at + 1u < VgaController::kVramBytes) {
@@ -192,11 +192,11 @@ uint16_t HpPalmtopVgaCard::ReadCommon16(uint32_t offset) {
 
 /* window_ is the host external-display window (re-derived from the restored
    mode); the VGA register file + framebuffer is the card state. */
-void HpPalmtopVgaCard::SaveState(StateWriter& w) {
+void HpF1252aCard::SaveState(StateWriter& w) {
     controller_.SaveState(w);
 }
 
-void HpPalmtopVgaCard::RestoreState(StateReader& r) {
+void HpF1252aCard::RestoreState(StateReader& r) {
     controller_.RestoreState(r);
     /* last_w_/last_h_ is the window-resize dedup cache, not guest state.
        OnInserted opened the window at the boot-default 640x480; reset the
@@ -206,7 +206,7 @@ void HpPalmtopVgaCard::RestoreState(StateReader& r) {
     SyncWindowToMode();
 }
 
-void HpPalmtopVgaCard::WriteCommon16(uint32_t offset, uint16_t value) {
+void HpF1252aCard::WriteCommon16(uint32_t offset, uint16_t value) {
     uint32_t at = 0u;
     if (offset >= kRegEnd && controller_.LinearOffset(offset, at) &&
         at + 1u < VgaController::kVramBytes) {
@@ -217,9 +217,9 @@ void HpPalmtopVgaCard::WriteCommon16(uint32_t offset, uint16_t value) {
     WriteCommon8(offset + 1u, (uint8_t)(value >> 8));
 }
 
-uint8_t  HpPalmtopVgaCard::ReadIo8(uint32_t o)             { return ReadCommon8(o);  }
-uint16_t HpPalmtopVgaCard::ReadIo16(uint32_t o)             { return ReadCommon16(o); }
-void     HpPalmtopVgaCard::WriteIo8 (uint32_t o, uint8_t v)  { WriteCommon8(o, v);  }
-void     HpPalmtopVgaCard::WriteIo16(uint32_t o, uint16_t v) { WriteCommon16(o, v); }
+uint8_t  HpF1252aCard::ReadIo8(uint32_t o)             { return ReadCommon8(o);  }
+uint16_t HpF1252aCard::ReadIo16(uint32_t o)             { return ReadCommon16(o); }
+void     HpF1252aCard::WriteIo8 (uint32_t o, uint8_t v)  { WriteCommon8(o, v);  }
+void     HpF1252aCard::WriteIo16(uint32_t o, uint16_t v) { WriteCommon16(o, v); }
 
 }
