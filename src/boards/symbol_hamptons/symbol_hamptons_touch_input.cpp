@@ -38,16 +38,16 @@ public:
         codec_->SetPenLineObserver([this](bool down) { gpio_->SetInputLevel(kGpioPenDown, !down); });
     }
 
-    void OnPenDown(int x, int y) override {
+    void PenDown(int x, int y) override {
         SetPosition(x, y);
         codec_->QueuePenEdge(true);
     }
-    void OnPenMove(int x, int y) override { SetPosition(x, y); }
-    void OnPenUp(int x, int y) override {
+    void PenMove(int x, int y) override { SetPosition(x, y); }
+    void PenUp(int x, int y) override {
         SetPosition(x, y);
         codec_->QueuePenEdge(false);
     }
-    void OnCaptureLost() override { codec_->QueuePenEdge(false); }
+    void CaptureLost() override { codec_->QueuePenEdge(false); }
 
 private:
     void SetPosition(int x, int y) {

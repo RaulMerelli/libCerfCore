@@ -27,6 +27,7 @@
 #include "../peripherals/peripheral_dispatcher.h"
 #include <cerfcore/platform/host_file.h>
 
+#include <chrono>
 #include <cstdarg>
 #include <cstdio>
 #include <cstring>
@@ -34,6 +35,13 @@
 #include <functional>
 
 namespace cerfcore {
+
+namespace {
+
+constexpr std::chrono::seconds kRefusedCardTimeout{10};
+constexpr std::chrono::seconds kRamOnlyCardTimeout{5};
+
+}
 
 REGISTER_SERVICE(Hibernation);
 
@@ -359,10 +367,10 @@ bool Hibernation::Restore(const std::string& path_in, bool ram_only) {
 
     stack.Close(NotificationId::LoadingState);
     if (outcome == RestoreOutcome::Refused)
-        stack.PostError("Failed to load the save state\n" + reason);
+        stack.Post(NotificationKind::Error, "Unable to resume\n" + reason, kRefusedCardTimeout);
     if (outcome == RestoreOutcome::MemoryAfterRefusal)
-        stack.PostError("Unable to resume\n"
-                        "Attempting to restore your RAM only. Perform a cold reset if guest is broken.");
+        stack.Post(NotificationKind::Warning, "Resuming RAM only\nCold reset a device if it's broken",
+                   kRamOnlyCardTimeout);
     return outcome != RestoreOutcome::Refused;
 }
 

@@ -15,9 +15,11 @@ public:
     using Service::Service;
     ~DeviceButtons() override = default;
 
-    virtual std::vector<ActionControl> Actions() = 0;
+    std::vector<ActionControl> Actions();
 
 protected:
+    virtual std::vector<ActionControl> BoardActions() = 0;
+
     struct RawTapButton {
         const char* id;
         const char* label;

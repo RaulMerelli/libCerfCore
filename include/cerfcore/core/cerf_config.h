@@ -38,5 +38,6 @@ inline constexpr char kTabHw[]          = "hw";
 inline constexpr char kTabFramebuffer[] = "fb";
 inline constexpr char kArgFullScreen[]     = "--full-screen";
 inline constexpr char kArgNoFocus[]        = "--no-focus";
+inline constexpr char kArgAutoCalibration[] = "--auto-calibration";
 
 }

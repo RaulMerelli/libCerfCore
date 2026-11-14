@@ -19,7 +19,7 @@ public:
         return emu_.Get<BoardContext>().GetBoardFamilyId() == BoardFamilyId::HpJornada700;
     }
 
-    std::vector<ActionControl> Actions() override {
+    std::vector<ActionControl> BoardActions() override {
         static constexpr uint16_t     kBezelAdcX = 49;
         static constexpr RawTapButton kBezel[]   = {
             { "settings",     "Settings",     212 },

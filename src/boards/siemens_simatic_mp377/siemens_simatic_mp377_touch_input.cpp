@@ -18,13 +18,13 @@ public:
         return bd && bd->GetBoardFamilyId() == BoardFamilyId::SiemensSimaticMp377;
     }
 
-    void OnPenDown(int x, int y) override { UpdateTouch(x, y, true); }
+    void PenDown(int x, int y) override { UpdateTouch(x, y, true); }
 
-    void OnPenMove(int x, int y) override { UpdateTouch(x, y, true); }
+    void PenMove(int x, int y) override { UpdateTouch(x, y, true); }
 
-    void OnPenUp(int x, int y) override { UpdateTouch(x, y, false); }
+    void PenUp(int x, int y) override { UpdateTouch(x, y, false); }
 
-    void OnCaptureLost() override {
+    void CaptureLost() override {
         emu_.Get<siemens_simatic_mp377::SiemensSimaticMp377TouchPanel>().CaptureLost();
     }
 

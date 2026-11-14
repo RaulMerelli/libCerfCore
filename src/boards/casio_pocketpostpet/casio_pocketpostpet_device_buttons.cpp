@@ -19,7 +19,7 @@ public:
         return emu_.Get<BoardContext>().GetBoardFamilyId() == BoardFamilyId::CasioPocketpostpet;
     }
 
-    std::vector<ActionControl> Actions() override {
+    std::vector<ActionControl> BoardActions() override {
         static constexpr uint16_t     kStripAdcX = 945u;
         static constexpr RawTapButton kStrip[]   = {
             { "top_menu",  "Top Menu",   73u },

@@ -15,9 +15,10 @@ public:
     using RelativeMouseInput::RelativeMouseInput;
 
     void OnReady() final;
-    void OnRelativeMove(int dx, int dy, uint32_t button_mask) final;
 
 protected:
+    void RelativeMove(int dx, int dy, uint32_t button_mask) final;
+
     virtual void OnMouseReady() = 0;
     virtual void ApplyHostMotion(int dx, int dy, uint32_t button_mask) = 0;
 

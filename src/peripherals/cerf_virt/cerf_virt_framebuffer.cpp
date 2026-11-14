@@ -343,6 +343,7 @@ bool CerfVirtFramebuffer::SetHostMode(uint32_t w, uint32_t h) {
         StoreGeometry(w, h);
     }
     LOG(Periph, "[CerfVirtFramebuffer] host mode %ux%u stride=%u\n", w, h, Stride());
+    emu_.Get<HostPresentation>().GuestRemoded(w, h);
     return true;
 }
 

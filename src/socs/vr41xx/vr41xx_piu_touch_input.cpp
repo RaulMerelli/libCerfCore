@@ -39,10 +39,10 @@ public:
                emu_.Get<Vr41xxPiuPanel>().HasTouchscreen();
     }
 
-    void OnPenDown(int x, int y) override { Drive(true, x, y); }
-    void OnPenMove(int x, int y) override { Drive(true, x, y); }
-    void OnPenUp  (int x, int y) override { Drive(false, x, y); }
-    void OnCaptureLost() override {
+    void PenDown(int x, int y) override { Drive(true, x, y); }
+    void PenMove(int x, int y) override { Drive(true, x, y); }
+    void PenUp  (int x, int y) override { Drive(false, x, y); }
+    void CaptureLost() override {
         emu_.Get<Vr41xxPiu>().SetPen(false, last_x_, last_y_);
     }
 

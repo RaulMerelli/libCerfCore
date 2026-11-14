@@ -12,14 +12,15 @@ public:
 
     bool ShouldRegister() override;
 
-    void OnPenDown(int x, int y) override;
-    void OnPenMove(int x, int y) override;
-    void OnPenUp  (int x, int y) override;
-    void OnCaptureLost() override;
-
     bool Down();
     int  X() const { return x_.load(std::memory_order_relaxed); }
     int  Y() const { return y_.load(std::memory_order_relaxed); }
+
+protected:
+    void PenDown(int x, int y) override;
+    void PenMove(int x, int y) override;
+    void PenUp  (int x, int y) override;
+    void CaptureLost() override;
 
 private:
     void SetPen(bool down, int x, int y);

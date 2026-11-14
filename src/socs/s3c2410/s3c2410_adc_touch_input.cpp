@@ -24,11 +24,11 @@ public:
         return emu_.TryGet<S3C2410TouchCalibration>() != nullptr;
     }
 
-    void OnPenDown(int x, int y) override { Drive(true,  x, y); }
-    void OnPenMove(int x, int y) override { Drive(true,  x, y); }
-    void OnPenUp  (int x, int y) override { Drive(false, x, y); }
+    void PenDown(int x, int y) override { Drive(true,  x, y); }
+    void PenMove(int x, int y) override { Drive(true,  x, y); }
+    void PenUp  (int x, int y) override { Drive(false, x, y); }
 
-    void OnCaptureLost() override {
+    void CaptureLost() override {
         emu_.Get<S3C2410Adc>().SetPen(false, last_x_, last_y_);
     }
 

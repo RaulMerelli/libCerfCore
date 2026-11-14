@@ -17,12 +17,12 @@ public:
 
     void OnReady() final;
 
-    void OnPenDown(int x, int y) final;
-    void OnPenMove(int x, int y) final;
-    void OnPenUp(int x, int y) final;
-    void OnCaptureLost() final;
-
 protected:
+    void PenDown(int x, int y) final;
+    void PenMove(int x, int y) final;
+    void PenUp(int x, int y) final;
+    void CaptureLost() final;
+
     using HostPen = HostPenInput::Pen;
     static constexpr uint8_t kPenUp          = HostPenInput::kPenUp;
     static constexpr uint8_t kPenDown        = HostPenInput::kPenDown;

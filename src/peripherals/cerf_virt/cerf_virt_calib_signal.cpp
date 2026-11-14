@@ -6,7 +6,7 @@
 #include <cerfcore/boards/board_context.h>
 #include <cerfcore/core/cerf_emulator.h>
 #include <cerfcore/core/device_config.h>
-#include <cerfcore/host/calibration_notice.h>
+#include <cerfcore/host/auto_calibration.h>
 
 namespace cerfcore {
 
@@ -32,18 +32,21 @@ public:
 
     void WriteWord(uint32_t addr, uint32_t value) override {
         if (addr - MmioBase() == CerfVirt::kCalSigEvent) {
-            auto& warn = emu_.Get<CalibrationNotice>();
+            auto& calibration = emu_.Get<AutoCalibration>();
             if (value == CerfVirt::kCalSigAppeared) {
-                warn.OnCalibrationAppeared();
+                calibration.OnGuestAdditionsCalibration(true);
                 return;
             }
             if (value == CerfVirt::kCalSigDisappeared) {
-                warn.OnCalibrationDisappeared();
+                calibration.OnGuestAdditionsCalibration(false);
                 return;
             }
         }
         HaltUnsupportedAccess("WriteWord", addr, value);
     }
+
+    void SaveState(StateWriter& w) override { emu_.Get<AutoCalibration>().SaveGuestAdditionsState(w); }
+    void RestoreState(StateReader& r) override { emu_.Get<AutoCalibration>().RestoreGuestAdditionsState(r); }
 };
 
 REGISTER_SERVICE(CerfVirtCalibSignal);

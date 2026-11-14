@@ -11,9 +11,9 @@ namespace cerfcore {
 
 REGISTER_SERVICE(UserConfigWriter);
 
-void UserConfigWriter::WriteConfigurableScreenSize(uint32_t width,
+bool UserConfigWriter::WriteConfigurableScreenSize(uint32_t width,
                                                    uint32_t height) {
-    if (width == 0 || height == 0) return;
+    if (width == 0 || height == 0) return false;
 
     auto& config = emu_.Get<DeviceConfig>();
     const std::string path = UserConfigPath(config.device_name);
@@ -30,7 +30,7 @@ void UserConfigWriter::WriteConfigurableScreenSize(uint32_t width,
         CfgEmptyObject::kWrite, error);
     if (!written) {
         LOG(Cfg, "UserConfigWriter: %s\n", error.c_str());
-        return;
+        return false;
     }
 
     config.board_configurable_screen_width    = width;
@@ -38,6 +38,7 @@ void UserConfigWriter::WriteConfigurableScreenSize(uint32_t width,
     config.board_configurable_screen_explicit = true;
     LOG(Cfg, "UserConfigWriter: persisted guest resolution %ux%u\n", width,
         height);
+    return true;
 }
 
 void UserConfigWriter::WriteHud(const std::string& hud) {

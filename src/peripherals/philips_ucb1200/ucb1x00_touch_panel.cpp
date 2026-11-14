@@ -19,15 +19,15 @@ bool Ucb1x00TouchPanel::ShouldRegister() {
            b == BoardFamilyId::SharpMobilonHc || b == BoardFamilyId::SiemensSimpad;
 }
 
-void Ucb1x00TouchPanel::OnPenDown(int x, int y) { SetPen(true, x, y); }
+void Ucb1x00TouchPanel::PenDown(int x, int y) { SetPen(true, x, y); }
 
-void Ucb1x00TouchPanel::OnPenMove(int x, int y) {
+void Ucb1x00TouchPanel::PenMove(int x, int y) {
     if (Down()) SetPen(true, x, y);
 }
 
-void Ucb1x00TouchPanel::OnPenUp(int x, int y) { SetPen(false, x, y); }
+void Ucb1x00TouchPanel::PenUp(int x, int y) { SetPen(false, x, y); }
 
-void Ucb1x00TouchPanel::OnCaptureLost() { SetPen(false, 0, 0); }
+void Ucb1x00TouchPanel::CaptureLost() { SetPen(false, 0, 0); }
 
 bool Ucb1x00TouchPanel::Down() { return emu_.Get<Ucb1x00Codec>().PenDown(); }
 

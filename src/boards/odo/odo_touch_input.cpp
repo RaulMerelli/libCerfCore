@@ -19,17 +19,17 @@ public:
         return bd && bd->GetBoardFamilyId() == BoardFamilyId::Odo;
     }
 
-    void OnPenDown    (int x, int y) override {
+    void PenDown    (int x, int y) override {
         emu_.Get<OdoTouchSound>().OnPenDown(x, y);
     }
-    void OnPenMove    (int x, int y) override {
+    void PenMove    (int x, int y) override {
         emu_.Get<OdoTouchSound>().OnPenMove(x, y);
     }
-    void OnPenUp      (int x, int y) override {
+    void PenUp      (int x, int y) override {
         (void)x; (void)y;
         emu_.Get<OdoTouchSound>().OnPenUp();
     }
-    void OnCaptureLost() override {
+    void CaptureLost() override {
         emu_.Get<OdoTouchSound>().OnPenUp();
     }
 };

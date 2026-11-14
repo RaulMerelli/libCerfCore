@@ -125,23 +125,24 @@ public:
         return emu_.Get<DeviceConfig>().guest_additions;
     }
 
-    void OnMove(int sx, int sy, uint32_t button_mask) override {
+    bool SourceReady() const override {
+        return emu_.Get<CerfGuestLiveness>().IsAlive();
+    }
+
+protected:
+    void Move(int sx, int sy, uint32_t button_mask) override {
         uint32_t nx, ny;
         Normalize(sx, sy, nx, ny);
         emu_.Get<CerfVirtPointer>().SetPointer(nx, ny, button_mask);
     }
 
-    void OnWheel(int sx, int sy, int delta) override {
+    void Wheel(int sx, int sy, int delta) override {
         (void)sx; (void)sy;
         emu_.Get<CerfVirtPointer>().AddWheel(delta);
     }
 
-    void OnCaptureLost() override {
+    void CaptureLost() override {
         emu_.Get<CerfVirtPointer>().ClearButtons();
-    }
-
-    bool SourceReady() const override {
-        return emu_.Get<CerfGuestLiveness>().IsAlive();
     }
 
 private:

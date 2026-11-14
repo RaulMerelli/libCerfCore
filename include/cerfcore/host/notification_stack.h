@@ -3,14 +3,17 @@
 #include "../core/service.h"
 
 #include <atomic>
+#include <chrono>
+#include <condition_variable>
 #include <cstdint>
 #include <mutex>
 #include <string>
+#include <thread>
 #include <vector>
 
 namespace cerfcore {
 
-enum class NotificationKind : uint8_t { Warning, Error };
+enum class NotificationKind : uint8_t { Warning, Error, Success };
 
 enum class NotificationId : uint32_t {
     EmulatorPaused = 1,
@@ -29,8 +32,11 @@ class NotificationStack : public Service {
 public:
     using Service::Service;
 
+    void OnShutdown() override;
+
     void Show(NotificationId id, NotificationKind kind, std::string text);
     void Close(NotificationId id);
+    void Post(NotificationKind kind, std::string text, std::chrono::milliseconds timeout = {});
     void PostError(std::string text);
     void Dismiss(uint32_t id);
 
@@ -38,13 +44,25 @@ public:
     uint64_t Snapshot(std::vector<NotificationCard>& out) const;
 
 private:
-    void Remove(uint32_t id, const char* how);
+    using Clock = std::chrono::steady_clock;
 
-    static constexpr uint32_t kFirstErrorId = 0x100u;
+    struct Expiry {
+        uint32_t          id;
+        Clock::time_point at;
+    };
+
+    void Remove(uint32_t id, const char* how);
+    void ExpireLoop();
+
+    static constexpr uint32_t kFirstPostId = 0x100u;
 
     mutable std::mutex            mtx_;
+    std::condition_variable       wake_;
     std::vector<NotificationCard> cards_;
-    uint32_t                      next_error_id_ = kFirstErrorId;
+    std::vector<Expiry>           expiries_;
+    uint32_t                      next_post_id_ = kFirstPostId;
+    bool                          stop_         = false;
+    std::thread                   expiry_worker_;
     std::atomic<uint64_t>         gen_{0};
 };
 

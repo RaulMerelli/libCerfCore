@@ -133,6 +133,7 @@ void ConfigLoader::LoadFeatures(const json& root, DeviceConfig& config, const st
     }
     Reader().LoadOptBool(root, config_key::kFullScreen, config.start_fullscreen, path, {});
     Reader().LoadOptBool(root, config_key::kDoubleTapHelper, config.double_tap_helper, path, {});
+    Reader().LoadOptBool(root, config_key::kAutomaticCalibration, config.automatic_calibration, path, {});
     emu_.Get<ConfigMutableFields>().LoadHud(root, config, path);
     emu_.Get<ConfigMutableFields>().LoadShaders(root, config, path);
     Reader().LoadOptBool(root, config_key::kAdoptGaResolution, config.adopt_guest_additions_resolution_for_host_screen,
@@ -365,6 +366,8 @@ void ConfigLoader::LoadInto(DeviceConfig& config) {
             config.start_fullscreen = true;
         } else if (strcmp(a, kArgNoFocus) == 0) {
             config.no_focus = true;
+        } else if (strcmp(a, kArgAutoCalibration) == 0) {
+            config.calibration_auto_answer = true;
         } else if (ReadCliOption(a, kArgBoot, v)) {
             if      (strcmp(v, kBootResume) == 0) config.boot_mode = StateBootMode::Resume;
             else if (strcmp(v, kBootWarm)   == 0) config.boot_mode = StateBootMode::Warm;

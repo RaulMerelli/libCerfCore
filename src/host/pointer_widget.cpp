@@ -1,5 +1,7 @@
 #include <cerfcore/host/pointer_widget.h>
 
+#include "calibration_run.h"
+
 #include <cerfcore/core/cerf_emulator.h>
 #include <cerfcore/core/device_config.h>
 #include <cerfcore/core/utf16.h>
@@ -90,6 +92,7 @@ void PointerWidget::SaveWidgetState(StateWriter& w) const {
     w.Write<uint8_t>("user_picked", emu_.Get<PointerRouter>().UserPicked() ? 1u : 0u);
     if (const PointerHostOptions* options = emu_.TryGet<PointerHostOptions>())
         options->SaveState(w);
+    if (const CalibrationRun* run = emu_.TryGet<CalibrationRun>()) run->SaveState(w);
 }
 
 void PointerWidget::RestoreWidgetState(StateReader& r) {
@@ -103,6 +106,7 @@ void PointerWidget::RestoreWidgetState(StateReader& r) {
     r.Read("user_picked", picked);
     emu_.Get<PointerRouter>().RestoreUserPicked(picked != 0);
     if (auto* options = emu_.TryGet<PointerHostOptions>()) options->RestoreState(r);
+    if (auto* run = emu_.TryGet<CalibrationRun>()) run->RestoreState(r);
 }
 
 }

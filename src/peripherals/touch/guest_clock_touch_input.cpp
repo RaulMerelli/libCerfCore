@@ -10,20 +10,20 @@ void GuestClockTouchInput::OnReady() {
     OnTouchReady();
 }
 
-void GuestClockTouchInput::OnPenDown(int x, int y) {
+void GuestClockTouchInput::PenDown(int x, int y) {
     pens_.Track(x, y);
     QueueHostPen(HostPen{kPenDown, x, y});
 }
 
-void GuestClockTouchInput::OnPenMove(int x, int y) {
+void GuestClockTouchInput::PenMove(int x, int y) {
     pens_.Track(x, y);
 }
 
-void GuestClockTouchInput::OnPenUp(int, int) {
+void GuestClockTouchInput::PenUp(int, int) {
     QueueHostPen(HostPen{kPenUp, 0, 0});
 }
 
-void GuestClockTouchInput::OnCaptureLost() {
+void GuestClockTouchInput::CaptureLost() {
     QueueHostPen(HostPen{kPenUp, 0, 0});
 }
 

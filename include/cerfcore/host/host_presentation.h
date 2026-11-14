@@ -18,6 +18,7 @@ public:
     virtual uint32_t SurfaceWidth() const = 0;
     virtual uint32_t SurfaceHeight() const = 0;
     virtual void     RestoreSurfaceSize(uint32_t w, uint32_t h) = 0;
+    virtual void     FitGuestResolution(uint32_t w, uint32_t h) = 0;
     virtual void     SaveScreenshot(const std::string& path) = 0;
 
     virtual void ShowCustomizationsRestart() = 0;

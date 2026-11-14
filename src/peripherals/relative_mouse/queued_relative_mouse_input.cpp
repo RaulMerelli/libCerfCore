@@ -17,7 +17,7 @@ void QueuedRelativeMouseInput::OnReady() {
     OnMouseReady();
 }
 
-void QueuedRelativeMouseInput::OnRelativeMove(int dx, int dy, uint32_t button_mask) {
+void QueuedRelativeMouseInput::RelativeMove(int dx, int dy, uint32_t button_mask) {
     {
         std::lock_guard<std::mutex> lk(host_mtx_);
         if (host_motion_.empty() || host_motion_.back().buttons != button_mask) {

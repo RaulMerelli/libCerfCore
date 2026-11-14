@@ -18,10 +18,10 @@ public:
 
     void OnReady() override { panel_ = &emu_.Get<Hp600TouchPanel>(); }
 
-    void OnPenDown(int x, int y) override { panel_->PenDown(x, y); }
-    void OnPenMove(int x, int y) override { panel_->PenMove(x, y); }
-    void OnPenUp(int, int) override { panel_->PenUp(); }
-    void OnCaptureLost() override { panel_->PenUp(); }
+    void PenDown(int x, int y) override { panel_->PenDown(x, y); }
+    void PenMove(int x, int y) override { panel_->PenMove(x, y); }
+    void PenUp(int, int) override { panel_->PenUp(); }
+    void CaptureLost() override { panel_->PenUp(); }
 
 private:
     Hp600TouchPanel* panel_ = nullptr;

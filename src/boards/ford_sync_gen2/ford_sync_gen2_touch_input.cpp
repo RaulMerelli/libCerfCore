@@ -92,10 +92,10 @@ public:
         });
     }
 
-    void OnPenDown    (int x, int y) override { Apply(x, y, true);  }
-    void OnPenMove    (int x, int y) override { Apply(x, y, true);  }
-    void OnPenUp      (int x, int y) override { Apply(x, y, false); }
-    void OnCaptureLost()             override {
+    void PenDown    (int x, int y) override { Apply(x, y, true);  }
+    void PenMove    (int x, int y) override { Apply(x, y, true);  }
+    void PenUp      (int x, int y) override { Apply(x, y, false); }
+    void CaptureLost()             override {
         emu_.Get<Tsc2003Touch>().SetState(0, 0, false);
     }
 

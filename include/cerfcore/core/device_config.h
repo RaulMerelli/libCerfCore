@@ -62,6 +62,7 @@ constexpr bool kDefaultNetworkEnabled     = true;
 constexpr bool kDefaultGuestAdditions     = false;
 constexpr bool kDefaultStartFullscreen    = false;
 constexpr bool kDefaultDoubleTapHelper    = true;
+constexpr bool kDefaultAutomaticCalibration = true;
 constexpr bool kDefaultShaderScreenshots  = true;
 constexpr bool kDefaultAllowUntrustedApps = false;
 
@@ -173,6 +174,8 @@ struct DeviceConfig : public Service {
 
     bool double_tap_helper = kDefaultDoubleTapHelper;
 
+    bool automatic_calibration = kDefaultAutomaticCalibration;
+
     std::string hud;
 
     std::vector<ShaderPresetEntry>             shader_presets;
@@ -180,6 +183,8 @@ struct DeviceConfig : public Service {
     bool                                       shader_screenshots = kDefaultShaderScreenshots;
 
     bool no_focus = false;
+
+    bool calibration_auto_answer = false;
 
     bool adopt_guest_additions_resolution_for_host_screen = false;
 };

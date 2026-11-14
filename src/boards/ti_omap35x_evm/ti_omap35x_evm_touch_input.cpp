@@ -26,10 +26,10 @@ public:
         return bd && bd->GetBoardFamilyId() == BoardFamilyId::TiOmap35xEvm;
     }
 
-    void OnPenDown    (int x, int y) override { Apply(x, y, true);  }
-    void OnPenMove    (int x, int y) override { Apply(x, y, true);  }
-    void OnPenUp      (int x, int y) override { Apply(x, y, false); }
-    void OnCaptureLost()             override { ApplyUp(); }
+    void PenDown    (int x, int y) override { Apply(x, y, true);  }
+    void PenMove    (int x, int y) override { Apply(x, y, true);  }
+    void PenUp      (int x, int y) override { Apply(x, y, false); }
+    void CaptureLost()             override { ApplyUp(); }
 
 private:
     static uint16_t ToAdc(int pixel, int extent,

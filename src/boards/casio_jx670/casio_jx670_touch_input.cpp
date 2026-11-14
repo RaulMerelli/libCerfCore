@@ -17,16 +17,16 @@ public:
         return bd && bd->GetBoardFamilyId() == BoardFamilyId::CasioJx670;
     }
 
-    void OnPenDown(int x, int y) override {
+    void PenDown(int x, int y) override {
         emu_.Get<CasioJx670Companion>().SetTouchPen(true, x, y);
     }
-    void OnPenMove(int x, int y) override {
+    void PenMove(int x, int y) override {
         emu_.Get<CasioJx670Companion>().SetTouchPen(true, x, y);
     }
-    void OnPenUp(int x, int y) override {
+    void PenUp(int x, int y) override {
         emu_.Get<CasioJx670Companion>().SetTouchPen(false, x, y);
     }
-    void OnCaptureLost() override {
+    void CaptureLost() override {
         emu_.Get<CasioJx670Companion>().TouchCaptureLost();
     }
 };
