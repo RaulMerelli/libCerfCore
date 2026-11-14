@@ -1,10 +1,10 @@
 #pragma once
 
 #include <cerfcore/core/callback_list.h>
+#include "../../peripherals/pci/pci_segment.h"
 
 #include <cstdint>
 #include <functional>
-#include <vector>
 
 namespace cerfcore {
 
@@ -33,6 +33,7 @@ public:
     uint32_t IoWindowSize() const { return io_window_size_; }
 
     void RegisterDevice(PciDevice* dev);
+    void RegisterSubtractiveDecoder(PciDevice* dev);
     void RegisterBusResetListener(std::function<void()> listener);
 
     uint32_t ReadRegister(Register reg) const;
@@ -54,12 +55,13 @@ public:
     void PostRestore();
 
 private:
-    enum class Cycle { kMemory, kConfigType0, kConfigType1 };
+    enum class Cycle { kMemory, kConfigType0, kConfigType1, kInterruptAcknowledge };
 
     uint32_t   WindowOffset(uint32_t pdar, uint32_t pa, uint32_t* size);
     uint32_t   PciAddress(uint32_t pa, bool wide, Cycle* cycle);
     uint32_t   PciIoAddress(uint32_t pa);
     PciDevice* ConfigDevice(uint32_t pci, uint32_t* reg);
+    PciDevice* Type1Target(uint32_t pci) const;
 
     [[noreturn]] void Reject(const char* what, uint32_t addr, uint32_t value);
 
@@ -69,7 +71,7 @@ private:
     uint32_t                window_size_;
     uint32_t                io_window_base_;
     uint32_t                io_window_size_;
-    std::vector<PciDevice*> devices_;
+    PciSegment              segment_;
     CallbackList<>          bus_reset_;
     uint32_t                regs_[4]   = {};
     bool                    reset_held_ = false;

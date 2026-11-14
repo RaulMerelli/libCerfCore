@@ -3,6 +3,7 @@
 #include <cerfcore/core/cerf_emulator.h>
 #include <cerfengine/mips/mips_mmu.h>
 #include <cerfcore/boards/board_context.h>
+#include "nec_sg2_vr5500_dram.h"
 #include "nec_sg2_vr5500_family_id.h"
 
 #include <cstdint>
@@ -12,8 +13,8 @@ namespace cerfcore {
 
 namespace {
 
-constexpr uint32_t kDramPaBase = 0x00000000u;
-constexpr uint32_t kDramSize   = 0x08000000u;
+constexpr uint32_t kDramPaBase = NecSg2Vr5500Dram::kPaBase;
+constexpr uint32_t kDramSize   = NecSg2Vr5500Dram::kSize;
 constexpr uint32_t kDramVaBase = cerfengine::MipsSeg::kKusegEnd | kDramPaBase;
 
 class NecSg2Vr5500PageTableBuilder : public UnmappedWindowPageTableBuilder {

@@ -8,12 +8,13 @@ namespace {
 
 constexpr uint32_t kVendorDevice      = 0xAC1C104Cu;
 constexpr uint32_t kClassRevision     = 0x06070001u;
-constexpr uint32_t kHeaderTypeBist    = 0x00820000u;
-constexpr uint32_t kStatus            = 0x0210u;
-constexpr uint32_t kCapabilityPointer = 0xA0u;
+constexpr uint8_t  kHeaderType        = 0x82u;
+constexpr uint16_t kStatus            = 0x0210u;
 constexpr uint32_t kSecondaryStatus   = 0x0200u;
+constexpr uint32_t kAllOnes           = 0xFFFFFFFFu;
 
 constexpr uint16_t kCommandWritable   = 0x0147u;
+constexpr uint8_t  kByteWritable      = 0xFFu;
 constexpr uint32_t kMemWindowWritable = 0xFFFFF000u;
 constexpr uint32_t kIoBaseWritable    = 0xFFFFFFFCu;
 constexpr uint32_t kIoLimitWritable   = 0x0000FFFCu;
@@ -72,14 +73,6 @@ constexpr uint32_t kSocketDma0Writable = 0x00000003u;
 constexpr uint32_t kSocketDma1Writable = 0x0000FFF7u;
 constexpr uint32_t kSocketDmaDecode    = 0x00000001u;
 
-constexpr uint32_t kPowerManagementCaps = 0x7E210001u;
-constexpr uint32_t kPmcsrBridgeSupport  = 0x00800000u;
-constexpr uint32_t kPmcsrWritable       = 0x00000103u;
-constexpr uint32_t kPmcsrPowerState     = 0x00000003u;
-constexpr uint32_t kPmcsrPmeEnable      = 0x00000100u;
-constexpr uint32_t kPmcsrD0             = 0x00000000u;
-constexpr uint32_t kPmcsrD3Hot          = 0x00000003u;
-
 constexpr uint16_t kGpePowerChange = 0x0800u;
 constexpr uint16_t kGpeVpp12Change = 0x0100u;
 constexpr uint8_t  kGpoWritable    = 0x1Fu;
@@ -93,6 +86,9 @@ constexpr uint32_t kSerialDetect          = 0x08000000u;
 constexpr uint32_t WindowIndex(uint32_t reg, uint32_t first) { return (reg - first) >> 3; }
 
 }
+
+const PciCommonIdentity Pci1225ConfigSpace::kCommonIdentity{
+    kVendorDevice, kClassRevision, kStatus, 0x0000u, kCommandWritable, kByteWritable, kByteWritable, kHeaderType};
 
 void Pci1225SharedConfig::Reset(uint32_t mfunc_at_power_on, bool serial_eeprom_present, uint8_t gpi_input_levels) {
     mfunc               = mfunc_at_power_on & kMfuncWritable;
@@ -146,9 +142,7 @@ void Pci1225SharedConfig::RestoreState(StateReader& r) {
 }
 
 void Pci1225ConfigSpace::Reset() {
-    command_     = 0u;
-    cache_line_  = 0u;
-    latency_     = 0u;
+    common_.Reset();
     socket_bar_.base = 0u;
     bus_numbers_ = 0u;
     for (int i = 0; i < 2; ++i) {
@@ -163,17 +157,12 @@ void Pci1225ConfigSpace::Reset() {
     system_socket_  = kSystemControlReset & kSysSocketWritable;
     card_control_   = 0u;
     diagnostic_     = static_cast<uint8_t>(kDiagnosticReset & ~kDiagGlobal);
-    pmcsr_          = 0u;
+    pm_.Reset();
     gpe_enable_     = 0u;
     gpe_status_     = 0u;
     gpo_            = 0u;
     socket_active_  = false;
 }
-
-bool Pci1225ConfigSpace::PoweredDown() const {
-    return (pmcsr_ & kPmcsrPowerState) != 0u;
-}
-
 
 bool Pci1225ConfigSpace::SmiPending() const {
     return (system_socket_ & kSysSmiStatus) != 0u;
@@ -203,19 +192,12 @@ bool Pci1225ConfigSpace::Read(uint32_t reg, uint32_t* value) {
         *value = kReservedRegisterRead;
         return true;
     }
+    if (reg == PciCommonHeader::kRegIdentity && (diagnostic & kDiagTrueValue) != 0u) {
+        *value = kAllOnes;
+        return true;
+    }
+    if (common_.Read(reg, value)) return true;
     switch (reg) {
-        case 0x00:
-            *value = (diagnostic & kDiagTrueValue) != 0u ? 0xFFFFFFFFu : kVendorDevice;
-            return true;
-        case 0x04:
-            *value = (kStatus << 16) | command_;
-            return true;
-        case 0x08:
-            *value = kClassRevision;
-            return true;
-        case 0x0C:
-            *value = kHeaderTypeBist | (static_cast<uint32_t>(latency_) << 8) | cache_line_;
-            return true;
         case 0x10:
             *value = socket_bar_.Read();
             return true;
@@ -268,10 +250,8 @@ bool Pci1225ConfigSpace::Read(uint32_t reg, uint32_t* value) {
             *value = socket_dma_[(reg - 0x94u) >> 2];
             return true;
         case 0xA0:
-            *value = kPowerManagementCaps;
-            return true;
         case 0xA4:
-            *value = kPmcsrBridgeSupport | pmcsr_;
+            *value = pm_.Read(reg);
             return true;
         case 0xA8:
             *value = (static_cast<uint32_t>(gpe_enable_) << 16) | gpe_status_;
@@ -288,16 +268,9 @@ bool Pci1225ConfigSpace::Read(uint32_t reg, uint32_t* value) {
 }
 
 const char* Pci1225ConfigSpace::Write(uint32_t reg, uint32_t value) {
-    if (ReservedRegister(reg))
+    if (ReservedRegister(reg) || common_.Write(reg, value))
         return nullptr;
     switch (reg) {
-        case 0x04:
-            command_ = static_cast<uint16_t>(value & kCommandWritable);
-            return nullptr;
-        case 0x0C:
-            cache_line_ = static_cast<uint8_t>(value);
-            latency_    = static_cast<uint8_t>(value >> 8);
-            return nullptr;
         case 0x10:
             socket_bar_.Write(value);
             return nullptr;
@@ -377,13 +350,9 @@ const char* Pci1225ConfigSpace::Write(uint32_t reg, uint32_t value) {
                 return "enables the distributed DMA register decode, which needs a DMA engine";
             socket_dma_[1] = value & kSocketDma1Writable;
             return nullptr;
+        case 0xA0:
         case 0xA4:
-            if ((value & kPmcsrPmeEnable) != 0u)
-                return "sets PME_EN, whose PME# events and terminal connection are not modeled";
-            if ((pmcsr_ & kPmcsrPowerState) == kPmcsrD3Hot && (value & kPmcsrPowerState) == kPmcsrD0)
-                return "returns the function from D3hot to D0, whose internal reset is not modeled";
-            pmcsr_ = value & kPmcsrWritable;
-            return nullptr;
+            return pm_.Write(reg, value);
         case 0xA8:
             gpe_enable_ = static_cast<uint16_t>(value >> 16);
             gpe_status_ = static_cast<uint16_t>(gpe_status_ & ~value);
@@ -398,17 +367,15 @@ const char* Pci1225ConfigSpace::Write(uint32_t reg, uint32_t value) {
         case 0x00:
         case 0x08:
         case 0x14:
-        case 0xA0:
             return nullptr;
         default:
             return "is outside Table 18";
     }
 }
 
-void Pci1225ConfigSpace::SaveState(StateWriter& w) const {
-    w.Write("cfg_command", command_);
-    w.Write("cfg_cache_line", cache_line_);
-    w.Write("cfg_latency", latency_);
+void Pci1225ConfigSpace::SaveState(StateWriter& w) {
+    StateWriteField field(w);
+    PciCommonHeader::Visit(common_, field);
     w.Write("cfg_socket_bar", socket_bar_.base);
     w.Write("cfg_bus_numbers", bus_numbers_);
     w.WriteBytes("cfg_mem_base", mem_base_, sizeof(mem_base_));
@@ -421,7 +388,7 @@ void Pci1225ConfigSpace::SaveState(StateWriter& w) const {
     w.Write("cfg_card_control", card_control_);
     w.Write("cfg_diagnostic", diagnostic_);
     w.WriteBytes("cfg_socket_dma", socket_dma_, sizeof(socket_dma_));
-    w.Write("cfg_pmcsr", pmcsr_);
+    w.Write("cfg_pmcsr", pm_.power_state);
     w.Write("cfg_gpe_enable", gpe_enable_);
     w.Write("cfg_gpe_status", gpe_status_);
     w.Write("cfg_gpo", gpo_);
@@ -429,9 +396,8 @@ void Pci1225ConfigSpace::SaveState(StateWriter& w) const {
 }
 
 void Pci1225ConfigSpace::RestoreState(StateReader& r) {
-    r.Read("cfg_command", command_);
-    r.Read("cfg_cache_line", cache_line_);
-    r.Read("cfg_latency", latency_);
+    StateReadField field(r);
+    PciCommonHeader::Visit(common_, field);
     r.Read("cfg_socket_bar", socket_bar_.base);
     r.Read("cfg_bus_numbers", bus_numbers_);
     r.ReadBytes("cfg_mem_base", mem_base_, sizeof(mem_base_));
@@ -444,7 +410,7 @@ void Pci1225ConfigSpace::RestoreState(StateReader& r) {
     r.Read("cfg_card_control", card_control_);
     r.Read("cfg_diagnostic", diagnostic_);
     r.ReadBytes("cfg_socket_dma", socket_dma_, sizeof(socket_dma_));
-    r.Read("cfg_pmcsr", pmcsr_);
+    r.Read("cfg_pmcsr", pm_.power_state);
     r.Read("cfg_gpe_enable", gpe_enable_);
     r.Read("cfg_gpe_status", gpe_status_);
     r.Read("cfg_gpo", gpo_);

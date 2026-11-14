@@ -2,8 +2,8 @@
 
 #include "../../peripherals/pci/pci_bar.h"
 #include "../../peripherals/pci/pci_device.h"
+#include "../../peripherals/pci/pci_type0_header.h"
 
-#include <cstddef>
 #include <cstdint>
 
 namespace cerfcore {
@@ -12,9 +12,7 @@ class CerfEmulator;
 
 class Vrc5477IoPciFunction : public PciDevice {
 public:
-    static constexpr size_t kBars = 6;
-
-    Vrc5477IoPciFunction(CerfEmulator& emu, uint8_t dev, PciBar bar0);
+    Vrc5477IoPciFunction(CerfEmulator& emu, uint8_t dev, uint32_t identity, uint32_t class_rev, PciBar bar0);
 
     void Reset();
 
@@ -36,14 +34,13 @@ public:
     void RestoreState(StateReader& r) override;
 
 private:
-    uint32_t Line() const;
+    static bool HeaderStub(uint32_t reg);
+    uint32_t    Line() const;
 
-    CerfEmulator& emu_;
-    uint8_t       dev_;
-    PciBar        bars_[kBars] = {};
-    uint32_t      command_       = 0;
-    uint32_t      cache_latency_ = 0;
-    uint32_t      interrupt_     = 0;
+    CerfEmulator&     emu_;
+    uint8_t           dev_;
+    PciHeaderIdentity identity_;
+    PciType0Header    header_;
 };
 
 }

@@ -1,19 +1,21 @@
 #pragma once
 
 #include <cerfcore/core/service.h>
+#include "pci_bus.h"
 
-#include <functional>
+#include <cstdint>
 
 namespace cerfcore {
 
 class PciDevice;
 
-class PciHostBridge : public Service {
+class PciHostBridge : public Service, public PciBus {
 public:
     using Service::Service;
 
-    virtual void RegisterPciDevice(PciDevice* dev) = 0;
-    virtual void RegisterBusResetListener(std::function<void()> listener) = 0;
+    virtual void RegisterSubtractiveDecoder(PciDevice* dev) = 0;
+
+    virtual uint8_t DeviceOfIdselLine(uint32_t line) const = 0;
 };
 
 }

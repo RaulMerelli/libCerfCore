@@ -36,3 +36,4 @@
 - **[Android Open Source Project](https://source.android.com/)**
 - **[X.Org Trident driver](https://gitlab.freedesktop.org/xorg/driver/xf86-video-trident)**
 - **[sh3-emu](https://github.com/Gadgetoid/sh3-emu)** - Phil Howard
+- **[coreboot](https://www.coreboot.org/)**

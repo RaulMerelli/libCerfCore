@@ -1,6 +1,7 @@
 #include "../pci/pci_bar.h"
 #include "../pci/pci_device.h"
 #include "../pci/pci_host_bridge.h"
+#include "../pci/pci_type0_header.h"
 #include "ati_ragexl_display.h"
 
 #include <cerfcore/core/byte_order.h>
@@ -28,7 +29,10 @@ constexpr uint8_t  kPciDev   = 1u;        /* bus-0 slot (OS matches by VID/DID, 
 constexpr uint32_t kFbSize   = 0x00800000u;
 constexpr uint32_t kMmioSize = 0x00001000u;
 constexpr uint32_t kBarMemPrefetch = 0x8u;    /* PCI BAR bit3: memory prefetchable */
-constexpr uint32_t kCmdMemEnable   = 0x2u;    /* PCI command: memory space enable */
+constexpr size_t   kFbBar          = 0u;
+constexpr size_t   kMmioBar        = 2u;
+
+constexpr PciHeaderIdentity kHeaderIdentity{{kVendorId | (kDeviceId << 16), 0x03000000u, 0u, 0u, 0xFFFFu, 0u, 0u, 0u}, 0u, 0u, 0u};
 
 /* The four non-latch Mach64 registers. */
 constexpr uint32_t kRegConfigChipId  = 0x4E0u;
@@ -81,8 +85,9 @@ public:
     }
     void OnReady() override {
         fb_.assign(kFbSize, 0);
-        bars_[0] = { ~(kFbSize - 1u),   kBarMemPrefetch, 0 };   /* BAR0: framebuffer */
-        bars_[2] = { ~(kMmioSize - 1u), 0u,              0 };   /* BAR2: MMIO regs */
+        header_.SetBarReset(kFbBar, PciBar{~(kFbSize - 1u), kBarMemPrefetch, 0u});
+        header_.SetBarReset(kMmioBar, PciBar{~(kMmioSize - 1u), 0u, 0u});
+        header_.Reset();
         emu_.Get<GuestCpuReset>().RegisterResetListener([this](ResetLineKind) { ResetChip(); });
         auto& bridge = emu_.Get<PciHostBridge>();
         bridge.RegisterBusResetListener([this] { ResetChip(); });
@@ -90,8 +95,7 @@ public:
     }
 
     void ResetChip() {
-        command_ = 0;
-        for (PciBar& b : bars_) b.base = 0;
+        header_.Reset();
         std::memset(regs_, 0, sizeof(regs_));
         clock_cntl_ = 0;
         std::memset(pll_, 0, sizeof(pll_));
@@ -104,42 +108,31 @@ public:
     uint8_t PciFnc() const override { return 0u; }
 
     uint32_t ConfigRead(uint32_t reg) override {
-        switch (reg) {
-            case 0x00: return kVendorId | (kDeviceId << 16);
-            case 0x04: return command_;                    /* status (high 16) = 0 */
-            case 0x08: return 0x03000000u;                 /* class 0x03 / sub 0x00 / progif 0x00 / rev 0 */
-            case 0x0C: return 0x00000000u;                 /* header type 0, single function */
-            case 0x10: case 0x14: case 0x18:               /* BAR0..2 */
-                return bars_[(reg - 0x10u) / 4u].Read();
-            default:   return 0u;                          /* BAR3..5, expansion ROM, etc. unimplemented */
-        }
+        uint32_t value = 0u;
+        return header_.Read(reg, &value) ? value : 0u;
     }
-    void ConfigWrite(uint32_t reg, uint32_t value) override {
-        if (reg == 0x04) { command_ = value & 0xFFFFu; return; }
-        if (reg >= 0x10u && reg <= 0x18u) bars_[(reg - 0x10u) / 4u].Write(value);
-    }
+    void ConfigWrite(uint32_t reg, uint32_t value) override { header_.Write(reg, value); }
 
     bool MemClaims(uint32_t addr) const override { return FbHit(addr) || MmioHit(addr); }
     uint32_t MemRead(uint32_t addr, unsigned size) override {
-        if (FbHit(addr)) return FbRead(addr - bars_[0].base, size);
-        if (MmioHit(addr)) return MmioRead(addr - bars_[2].base, size);
+        if (FbHit(addr)) return FbRead(addr - header_.Bar(kFbBar).base, size);
+        if (MmioHit(addr)) return MmioRead(addr - header_.Bar(kMmioBar).base, size);
         emu_.Get<Fatal>().Die("AtiRageXl: Mach64 MMIO read reg+0x%03X val=0x%08X out of BAR",
-                              addr - bars_[2].base, 0u);
+                              addr - header_.Bar(kMmioBar).base, 0u);
     }
     void MemWrite(uint32_t addr, uint32_t value, unsigned size) override {
-        if (FbHit(addr)) { FbWrite(addr - bars_[0].base, value, size); return; }
-        if (MmioHit(addr)) { MmioWrite(addr - bars_[2].base, value, size); return; }
+        if (FbHit(addr)) { FbWrite(addr - header_.Bar(kFbBar).base, value, size); return; }
+        if (MmioHit(addr)) { MmioWrite(addr - header_.Bar(kMmioBar).base, value, size); return; }
         emu_.Get<Fatal>().Die("AtiRageXl: Mach64 MMIO write reg+0x%03X val=0x%08X out of BAR",
-                              addr - bars_[2].base, value);
+                              addr - header_.Bar(kMmioBar).base, value);
     }
 
     void SaveState(StateWriter& w) override {
-        w.Write("command", command_);
         static_assert(StateVisitCoversAllBytes<PciBar>(
                           [](PciBar& b, StateFieldBytes& f) { PciBar::Visit(b, f); }),
                       "PciBar::Visit must name or skip every field of PciBar");
-        StateWriteField bar_field(w);
-        for (PciBar& b : bars_) PciBar::Visit(b, bar_field);
+        StateWriteField header_field(w);
+        PciType0Header::Visit(header_, header_field);
         w.WriteBytes("fb", fb_.data(), fb_.size());
         w.WriteBytes("regs", regs_, sizeof(regs_));
         w.Write("clock_cntl", clock_cntl_);
@@ -149,9 +142,8 @@ public:
         w.Write("signaled_h", signaled_h_);
     }
     void RestoreState(StateReader& r) override {
-        r.Read("command", command_);
-        StateReadField bar_field(r);
-        for (PciBar& b : bars_) PciBar::Visit(b, bar_field);
+        StateReadField header_field(r);
+        PciType0Header::Visit(header_, header_field);
         r.ReadBytes("fb", fb_.data(), fb_.size());
         r.ReadBytes("regs", regs_, sizeof(regs_));
         r.Read("clock_cntl", clock_cntl_);
@@ -351,12 +343,12 @@ private:
             RegOut(kRegDpFrgdClr, 4), RegOut(kRegSrcOffPitch, 4), wmask, RegOut(kRegClrCmpCntl, 4));
     }
 
-    bool MemEnabled() const { return (command_ & kCmdMemEnable) != 0; }
+    bool MemEnabled() const { return (header_.Command() & PciCommonHeader::kCommandMemory) != 0; }
     bool FbHit(uint32_t a) const {
-        return MemEnabled() && bars_[0].Decodes(a);
+        return MemEnabled() && header_.Bar(kFbBar).Decodes(a);
     }
     bool MmioHit(uint32_t a) const {
-        return MemEnabled() && bars_[2].Decodes(a);
+        return MemEnabled() && header_.Bar(kMmioBar).Decodes(a);
     }
     uint32_t FbRead(uint32_t off, unsigned size) const {
         uint32_t v = 0;
@@ -366,8 +358,7 @@ private:
     void FbWrite(uint32_t off, uint32_t value, unsigned size) {
         for (unsigned i = 0; i < size && off + i < fb_.size(); ++i) fb_[off + i] = uint8_t(value >> (i * 8));
     }
-    uint32_t command_ = 0;
-    PciBar bars_[3];
+    PciType0Header header_{kHeaderIdentity};
     std::vector<uint8_t> fb_;
     uint8_t  regs_[4096] = {};
     uint32_t clock_cntl_ = 0;

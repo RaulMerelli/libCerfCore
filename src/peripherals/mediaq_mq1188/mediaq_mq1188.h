@@ -2,6 +2,7 @@
 
 #include <cerfcore/peripherals/peripheral_base.h>
 #include "../../lcd/display_mode_latch.h"
+#include "../usb/ohci_host_controller.h"
 #include "mediaq_mq1188_ge.h"
 
 #include <cstdint>
@@ -13,7 +14,7 @@ namespace cerfcore {
    PA 0x08000000). Ref: MediaQ doc 12-00026 Rev D, Ch.4. The 512 KB aperture
    is frame-buffer SRAM except an 8 KB register window at +0x40000 (Table 4-1
    / Fig 4-1) - only that window has device semantics. */
-class MediaQMq1188 : public Peripheral, public MediaQGeHost {
+class MediaQMq1188 : public Peripheral, public MediaQGeHost, public OhciHostBus {
 public:
     using Peripheral::Peripheral;
 
@@ -32,6 +33,11 @@ public:
 
     void SaveState(StateWriter& w) override;
     void RestoreState(StateReader& r) override;
+    void PostRestore() override;
+
+    uint32_t OhciRead32(uint32_t addr) override;
+    void     OhciWrite32(uint32_t addr, uint32_t value) override;
+    void     OhciInterrupt(bool asserted) override;
 
     /* Getters consumed by MediaQMq1188Renderer. All values come from the
        Graphics Controller register block (Table 4-9) and Device Config
@@ -46,11 +52,12 @@ public:
     uint32_t PaletteEntry(uint32_t index) const;   /* Color Palette 0x800-0xBFF. */
     const uint8_t* FbBytes()  const { return sram_.data(); }
     uint8_t*       FbMutableBytes() override { return sram_.data(); }   /* GE blit target. */
-    uint32_t       FbSize()   const override { return kApertureSize; }
+    uint32_t       FbSize()   const override { return kSramSize; }
     Fatal&         OwnerFatal() override;
 
 private:
     static constexpr uint32_t kApertureSize = 0x00080000u;  /* 512 KB total. */
+    static constexpr uint32_t kSramSize     = 0x00040000u;
     static constexpr uint32_t kRegBase      = 0x00040000u;  /* registers at +0x40000. */
     static constexpr uint32_t kRegWindow    = 0x00002000u;  /* 8 KB register space. */
 
@@ -77,14 +84,46 @@ private:
 
     /* USB Host OHCI operational registers (Table 4-1: 0x500-0x5FF). */
     static constexpr uint32_t kUsbLo = 0x500u, kUsbHi = 0x5FFu;
-    static constexpr uint32_t kHcRevision      = 0x00u;  /* OHCI op-reg offsets. */
-    static constexpr uint32_t kHcCommandStatus = 0x08u;
-    static constexpr uint32_t kHcrResetBit     = 0x1u;   /* HcCommandStatus.HCR self-clears. */
+
+    static constexpr uint32_t kCc02R             = 0x008u;
+    static constexpr uint32_t kIn00R             = 0x100u;
+    static constexpr uint32_t kIn01R             = 0x104u;
+    static constexpr uint32_t kIn02R             = 0x108u;
+    static constexpr uint32_t kIn03R             = 0x10Cu;
+    static constexpr uint32_t kIn00rEnable       = 0x1u;
+    static constexpr uint32_t kIn00rActiveHigh   = 0x2u;
+    static constexpr uint32_t kIn00rGpioLevel0   = 0x4u;
+    static constexpr uint32_t kIntGpio0          = 0x20u;
+    static constexpr uint32_t kIntUsbHost        = 0x8000u;
+    static constexpr uint32_t kIntLatched        = 0x00003FFFu;
+    static constexpr uint32_t kIntDefined        = 0x000FFFFFu;
+    static constexpr uint32_t kCc02rGpioField    = 4u;
+    static constexpr uint32_t kCc02rInputEnable  = 0x1u;
+    static constexpr uint32_t kCc02rOutputEnable = 0x2u;
+    static constexpr uint32_t kCc02rTestSource   = 0x4u;
+    static constexpr uint32_t kCc02rData         = 0x8u;
+    static constexpr uint32_t kMqGpioPins        = 3u;
+    static constexpr uint32_t kDc05rUsbHostClock = 0x2u;
+
+    static constexpr uint32_t kCc01rFifoFree     = 0x1Fu;
+    static constexpr uint32_t kCc01rSourceShift  = 8u;
+    static constexpr uint32_t kCc01rGeBusy       = 0x10000u;
+    static constexpr uint32_t kFifoDepth         = 16u;
+    static constexpr uint32_t kRawGpio0          = 0x10u;
+    static constexpr uint32_t kRawGeBusy         = 0x100u;
+    static constexpr uint32_t kRawSourceEmpty    = 0x200u;
+    static constexpr uint32_t kRawSourceHalf     = 0x400u;
+    static constexpr uint32_t kRawCommandEmpty   = 0x800u;
+    static constexpr uint32_t kRawCommandHalf    = 0x1000u;
+    static constexpr uint32_t kRawUsbHost        = 0x2000u;
+
+    static const OhciProfile kUsbProfile;
 
     static bool InRegWindow(uint32_t off) {
         return off >= kRegBase && off < kRegBase + kRegWindow;
     }
     static bool IsUsbHost(uint32_t roff) { return roff >= kUsbLo && roff <= kUsbHi; }
+    static uint32_t SramOffset(uint32_t off) { return off >= kRegBase + kRegWindow ? off - kRegBase : off; }
 
     static constexpr uint32_t kPaletteEntries  = 256u;
 
@@ -93,11 +132,27 @@ private:
     uint32_t RegRead(uint32_t addr);
     void     RegWrite(uint32_t addr, uint32_t value);
     void     PublishScreenSizeOnEnableEdge();
+    uint8_t* UsbBusMemory(uint32_t addr);
+    void     RequireWordRegisterAccess(uint32_t off, uint32_t addr, uint32_t value);
+    void     UpdateUsbClock();
+    uint32_t InterruptStatus() const;
+    uint32_t RawInterruptStatus();
+    bool     GpioInputEnabled(uint32_t gpio) const;
+    bool     GpioPinHigh(uint32_t gpio);
+    bool     GpioEventTrue(uint32_t gpio);
+    uint32_t ReadCc02R();
+    void     LatchGpioStatus();
+    void     WriteInterruptStatus(uint32_t value);
+    void     UpdateInterruptPin(bool force);
 
     std::vector<uint8_t> sram_;
     uint32_t reg_[kRegWindow / 4u] = {};   /* whole 8 KB register window. */
     DisplayModeLatch mode_latch_;
     MediaQMq1188Ge ge_{*this};
+    OhciHostController ohci_{emu_, kUsbProfile, *this};
+    uint32_t in02_latched_ = 0;
+    bool usb_interrupt_ = false;
+    bool pin_high_      = false;
 };
 
 }

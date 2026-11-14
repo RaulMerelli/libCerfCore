@@ -21,6 +21,9 @@ public:
     virtual uint8_t PciDev() const = 0;
     virtual uint8_t PciFnc() const = 0;
 
+    virtual bool ConfigClaims() const { return true; }
+    virtual bool DecodesFunction(uint32_t fnc) const { return PciFnc() == fnc; }
+
     virtual uint32_t ConfigRead(uint32_t reg) = 0;             /* reg = dword-aligned byte offset 0..0xFC */
     virtual void     ConfigWrite(uint32_t reg, uint32_t value) = 0;
 
@@ -35,6 +38,13 @@ public:
     virtual bool     IoClaims(uint32_t /*pci_io*/) const { return false; }
     virtual uint32_t IoRead(uint32_t /*pci_io*/, unsigned /*size*/) { return 0xFFFFFFFFu; }
     virtual void     IoWrite(uint32_t /*pci_io*/, uint32_t /*value*/, unsigned /*size*/) {}
+
+    virtual bool     IackClaims(uint32_t) const { return false; }
+    virtual uint32_t IackRead(unsigned) { return 0xFFFFFFFFu; }
+
+    virtual bool     Type1ConfigClaims(uint32_t) const { return false; }
+    virtual uint32_t Type1ConfigRead(uint32_t) { return 0xFFFFFFFFu; }
+    virtual void     Type1ConfigWrite(uint32_t, uint32_t) {}
 };
 
 }

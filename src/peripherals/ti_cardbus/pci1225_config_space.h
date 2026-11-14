@@ -1,6 +1,8 @@
 #pragma once
 
 #include "../pci/pci_bar.h"
+#include "../pci/pci_common_header.h"
+#include "../pci/pci_power_management.h"
 #include "pci1225_interrupt_terminals.h"
 
 #include <cstdint>
@@ -44,8 +46,12 @@ public:
 
     uint8_t  Function() const           { return function_; }
     const Pci1225InterruptTerminals& Terminals() const { return terminals_; }
-    bool     MemorySpaceEnabled() const { return (command_ & kCmdMemEnable) != 0u && !PoweredDown(); }
-    bool     IoSpaceEnabled() const     { return (command_ & kCmdIoEnable) != 0u && !PoweredDown(); }
+    bool     MemorySpaceEnabled() const {
+        return (common_.Command() & PciCommonHeader::kCommandMemory) != 0u && !pm_.PoweredDown();
+    }
+    bool     IoSpaceEnabled() const {
+        return (common_.Command() & PciCommonHeader::kCommandIo) != 0u && !pm_.PoweredDown();
+    }
     uint32_t SocketBarBase() const      { return socket_bar_.base; }
     bool     SocketBarDecodes(uint32_t addr) const { return socket_bar_.Decodes(addr); }
 
@@ -60,26 +66,24 @@ public:
     void NoteSocketActivity() { socket_active_ = true; }
     void NotePowerRequestChange(bool vpp12_crossed);
 
-    void SaveState(StateWriter& w) const;
+    void SaveState(StateWriter& w);
     void RestoreState(StateReader& r);
 
 private:
+    static const PciCommonIdentity kCommonIdentity;
     static constexpr uint32_t kSocketBarWritable = 0xFFFFF000u;
-    static constexpr uint16_t kCmdIoEnable  = 0x0001u;
-    static constexpr uint16_t kCmdMemEnable = 0x0002u;
     static constexpr uint16_t kBcIntr       = 0x0080u;
     static constexpr uint8_t  kDiagCsc      = 0x20u;
     static constexpr uint8_t  kCcIfg        = 0x01u;
-
-    bool PoweredDown() const;
+    static constexpr uint32_t kCapabilityPointer   = 0xA0u;
+    static constexpr uint32_t kPowerManagementCaps = 0x7E210001u;
+    static constexpr uint32_t kPmcsrBridgeSupport  = 0x00800000u;
 
     uint8_t                   function_;
     Pci1225SharedConfig&      shared_;
     Pci1225InterruptTerminals terminals_;
 
-    uint16_t command_        = 0u;
-    uint8_t  cache_line_     = 0u;
-    uint8_t  latency_        = 0u;
+    PciCommonHeader common_{kCommonIdentity};
     PciBar   socket_bar_{kSocketBarWritable, 0u, 0u};
     uint32_t bus_numbers_    = 0u;
     uint32_t mem_base_[2]    = {};
@@ -92,7 +96,7 @@ private:
     uint8_t  card_control_   = 0u;
     uint8_t  diagnostic_     = 0u;
     uint32_t socket_dma_[2]  = {};
-    uint32_t pmcsr_          = 0u;
+    PciPowerManagement pm_{kCapabilityPointer, kPowerManagementCaps, kPmcsrBridgeSupport};
     uint16_t gpe_enable_     = 0u;
     uint16_t gpe_status_     = 0u;
     uint8_t  gpo_            = 0u;

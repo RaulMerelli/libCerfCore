@@ -69,11 +69,13 @@ public:
         w.WriteBytes("regs", regs_, sizeof(regs_));
         emu_.Get<Vrc5477Intc>().SaveState(w);
         timers_->SaveState(w);
+        pci_->SaveTargetState(w);
     }
     void RestoreState(StateReader& r) override {
         r.ReadBytes("regs", regs_, sizeof(regs_));
         emu_.Get<Vrc5477Intc>().RestoreState(r);
         timers_->RestoreState(r);
+        pci_->RestoreTargetState(r);
     }
     void PostRestore() override { emu_.Get<Vrc5477Intc>().Renotify(); }
 
@@ -91,7 +93,7 @@ private:
             if constexpr (sizeof(T) == 4) {
                 return static_cast<T>(pci_->ReadReg(off));
             } else {
-                HaltUnsupportedAccess("PCI ctrl sub-word read", addr, 0);
+                return static_cast<T>(pci_->ReadRegPartial(off, sizeof(T)));
             }
         }
         if (Vrc5477Timers::Owns(off)) {
@@ -123,10 +125,10 @@ private:
         if (Vrc5477Pci::Owns(off)) {
             if constexpr (sizeof(T) == 4) {
                 pci_->WriteReg(off, static_cast<uint32_t>(v));
-                return;
             } else {
-                HaltUnsupportedAccess("PCI ctrl sub-word write", addr, v);
+                pci_->WriteRegPartial(off, static_cast<uint32_t>(v), sizeof(T));
             }
+            return;
         }
         if (Vrc5477Pci::IsBusControlHigh(off)) {
             if constexpr (sizeof(T) == 4) {
