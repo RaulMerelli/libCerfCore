@@ -21,9 +21,7 @@ namespace {
 constexpr uint32_t kOffMode     = 0x0u;
 constexpr uint32_t kOffBitRate  = 0x2u;
 constexpr uint32_t kOffControl  = 0x4u;
-constexpr uint32_t kOffTransmit = 0x6u;
 constexpr uint32_t kOffStatus   = 0x8u;
-constexpr uint32_t kOffReceive  = 0xAu;
 constexpr uint32_t kOffFifoCtl  = 0xCu;
 constexpr uint32_t kOffFifoData = 0xEu;
 
@@ -124,7 +122,7 @@ void Sh77xxScif::RequireRunning(const char* reg, uint32_t value, uint32_t held) 
 
 uint8_t Sh77xxScif::ReadByte(uint32_t addr) {
     const uint32_t off = addr - MmioBase();
-    if (off == kOffReceive) return ReadReceiveData();
+    if (off == kSh77xxScifReceiveOffset) return ReadReceiveData();
     std::lock_guard<std::mutex> lk(mu_);
     switch (off) {
         case kOffMode:    return smr_;
@@ -140,7 +138,7 @@ void Sh77xxScif::WriteByte(uint32_t addr, uint8_t value) {
         case kOffMode:     WriteMode(value); return;
         case kOffBitRate:  WriteBitRate(value); return;
         case kOffControl:  WriteControl(value); return;
-        case kOffTransmit: WriteTransmitData(value); return;
+        case kSh77xxScifTransmitOffset: WriteTransmitData(value); return;
         case kOffFifoCtl:  WriteFifoControl(value); return;
         default:           HaltUnsupportedAccess("WriteByte", addr, value);
     }
@@ -222,11 +220,8 @@ void Sh77xxScif::WriteFifoControl(uint8_t value) {
 
 void Sh77xxScif::WriteStatus(uint16_t value) {
     std::lock_guard<std::mutex> lk(mu_);
+    if (stopped_) return;
     const uint8_t cleared = static_cast<uint8_t>(~value & read_ones_ & kStatusClearable);
-    if (stopped_ && cleared != 0u) {
-        emu_.Get<Fatal>().Die("Sh77xxScif: SCSSR write 0x%04X at 0x%08X clears flags while STBCR2 stops the module clock",
-                              value, Channel().base);
-    }
     if ((cleared & kStatusTend) != 0u) tend_ = false;
     if ((cleared & kStatusTdfe) != 0u && tx_.size() > TxTriggerLocked()) tdfe_ = false;
     if ((cleared & kStatusRdf) != 0u && RxCountLocked() < RxTriggerLocked()) rdf_ = false;
@@ -240,7 +235,7 @@ uint16_t Sh77xxScif::ReadStatus() {
     std::lock_guard<std::mutex> lk(mu_);
     const uint8_t v = static_cast<uint8_t>((tend_ ? kStatusTend : 0u) | (tdfe_ ? kStatusTdfe : 0u) |
                                            (rdf_ ? kStatusRdf : 0u) | (dr_ ? kStatusDr : 0u));
-    read_ones_ = static_cast<uint8_t>(read_ones_ | v);
+    if (!stopped_) read_ones_ = static_cast<uint8_t>(read_ones_ | v);
     return v;
 }
 
@@ -334,6 +329,7 @@ void Sh77xxScif::PushRx(const uint8_t* data, size_t n) {
     {
         std::lock_guard<std::mutex> lk(mu_);
         if ((scr_ & kCtlRe) == 0u || (fcr_ & kFifoRfrst) != 0u || stopped_ || !powered_) return;
+        if (IrdaModeLocked() && (scr_ & kCtlTe) != 0u) return;
         rx_.insert(rx_.end(), data, data + n);
         UpdateRxFlagsLocked();
         DriveLocked();

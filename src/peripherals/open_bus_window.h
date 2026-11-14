@@ -20,15 +20,21 @@ public:
     uint8_t  ReadByte (uint32_t addr) override;
     uint16_t ReadHalf (uint32_t addr) override;
     uint32_t ReadWord (uint32_t addr) override;
+    uint64_t ReadDword(uint32_t addr) override;
 
     void WriteByte (uint32_t addr, uint8_t  value) override;
     void WriteHalf (uint32_t addr, uint16_t value) override;
     void WriteWord (uint32_t addr, uint32_t value) override;
+    void WriteDword(uint32_t addr, uint64_t value) override;
 
 protected:
     virtual std::string_view WindowBoardFamilyId() const = 0;
     virtual bool             WindowOnBoard(const BoardContext& bd) const;
     virtual const char*      WindowTag()     const = 0;
+    virtual bool             Floats(uint32_t addr, uint32_t bits, bool write) const;
+
+private:
+    void Require(const char* op, uint32_t addr, uint32_t bits, bool write, uint64_t value) const;
 
     FloatingBus bus_;
 };

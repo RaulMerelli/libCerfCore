@@ -10,6 +10,10 @@
 
 namespace cerfcore {
 
+inline constexpr uint32_t kSh77xxAdcBase        = 0x04000080u;
+inline constexpr uint32_t kSh77xxAdcDataBytes   = 0x10u;
+inline constexpr uint32_t kSh77xxAdcWindowBytes = 0x14u;
+
 class Sh77xxAnalogInputs;
 
 class Sh77xxAdc : public Peripheral {
@@ -18,8 +22,8 @@ public:
 
     void OnReady() override;
 
-    uint32_t MmioBase() const override { return 0x04000080u; }
-    uint32_t MmioSize() const override { return 0x14u; }
+    uint32_t MmioBase() const override { return kSh77xxAdcBase; }
+    uint32_t MmioSize() const override { return kSh77xxAdcWindowBytes; }
 
     uint8_t ReadByte(uint32_t addr) override;
     void    WriteByte(uint32_t addr, uint8_t value) override;
@@ -29,6 +33,16 @@ public:
     void PostRestore() override;
 
     void ExternalTrigger();
+
+protected:
+    struct ControlModel {
+        uint8_t stored;
+        uint8_t read_ones;
+        uint8_t write_zero;
+        uint8_t scan;
+    };
+
+    virtual ControlModel Control() const = 0;
 
 private:
     static constexpr uint32_t kDataRegisters = 4u;
@@ -48,7 +62,7 @@ private:
     Sh77xxAnalogInputs* inputs_ = nullptr;
     uint16_t            data_[kDataRegisters]{};
     uint8_t             control_     = 0u;
-    uint8_t             trigger_     = 0u;
+    uint8_t             adcr_        = 0u;
     uint8_t             temp_        = 0u;
     bool                end_         = false;
     bool                end_read_    = false;

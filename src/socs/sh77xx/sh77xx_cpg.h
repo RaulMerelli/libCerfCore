@@ -12,7 +12,6 @@ public:
     virtual GuestCycleClock::Rate ResetCpuRate() const = 0;
     virtual GuestCycleClock::Rate CpuRate(uint16_t frqcr) const = 0;
     virtual GuestCycleClock::Rate PeripheralRate(uint16_t frqcr) const = 0;
-    virtual uint8_t               Pll1Multiplier(uint16_t frqcr) const = 0;
 };
 
 }

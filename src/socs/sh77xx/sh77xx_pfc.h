@@ -9,6 +9,7 @@
 
 namespace cerfcore {
 
+inline constexpr uint32_t kSh77xxPfcBase   = 0x04000100u;
 inline constexpr uint32_t kSh77xxPortCount = 12u;
 inline constexpr uint32_t kSh77xxPortPins  = 8u;
 inline constexpr uint32_t kSh77xxPortC     = 2u;

@@ -50,7 +50,7 @@ inline constexpr RegWindowModel kModel = {
         {},
         {},
         {ReadKind::kFatal, WriteKind::kStored, 0xFF00u, 0x0000u, 0x00FFu, OtherReset::kReset, 0x0000u, 0x0000u},
-        {ReadKind::kFatal, WriteKind::kStored, 0x003Fu, 0x0000u, 0xFFC0u, OtherReset::kReset, 0x0000u, 0x0000u},
+        {ReadKind::kFatal, WriteKind::kStored, 0x003Fu, 0x0000u, 0xFF00u, OtherReset::kReset, 0x0000u, 0x0000u},
         {ReadKind::kFatal, WriteKind::kStored, 0xFF00u, 0x0000u, 0x00FFu, OtherReset::kReset, 0x0000u, 0x0000u},
         {ReadKind::kSampled, WriteKind::kFatal, 0x0000u, 0x0000u, 0x0000u, OtherReset::kReset, 0x0000u, 0x0000u},
     },

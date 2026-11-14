@@ -19,15 +19,14 @@ public:
     uint32_t MmioBase() const override { return 0x18000000u; }
     uint32_t MmioSize() const override { return 0x1F000000u - 0x18000000u; }
 
-    /* NEC VR4121 UM Table 3-3 "Load/Store Instruction (Extended ISA)":
-       "LD rt, offset (base)" Load Doubleword, "SD rt, offset (base)" Store
-       Doubleword. */
-    uint64_t ReadDword(uint32_t addr) override { return bus_.Read64(WindowTag(), addr); }
-    void WriteDword(uint32_t addr, uint64_t) override { bus_.Write(WindowTag(), 64u, addr); }
-
 protected:
     std::string_view WindowBoardFamilyId() const override { return BoardFamilyId::CasioPocketpostpet; }
     const char* WindowTag()   const override { return "CasioRomOpenBus"; }
+
+    /* NEC VR4121 UM Table 3-3 "Load/Store Instruction (Extended ISA)":
+       "LD rt, offset (base)" Load Doubleword, "SD rt, offset (base)" Store
+       Doubleword. */
+    bool Floats(uint32_t, uint32_t, bool) const override { return true; }
 };
 
 }  /* namespace */

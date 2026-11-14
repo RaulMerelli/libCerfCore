@@ -7,6 +7,8 @@
 
 namespace cerfcore {
 
+inline constexpr uint16_t kSh77xxFrqcrStc = 0x8030u;
+
 class Sh77xxFrqcr : public Peripheral {
 public:
     using Peripheral::Peripheral;

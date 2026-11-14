@@ -15,8 +15,11 @@
 
 namespace cerfcore {
 
-inline constexpr uint32_t kSh77xxIrdaBase  = 0x04000140u;
-inline constexpr uint32_t kSh77xxScif2Base = 0x04000150u;
+inline constexpr uint32_t kSh77xxIrdaBase           = 0x04000140u;
+inline constexpr uint32_t kSh77xxScif2Base          = 0x04000150u;
+inline constexpr uint32_t kSh77xxScifWindowBytes    = 0x10u;
+inline constexpr uint32_t kSh77xxScifTransmitOffset = 0x6u;
+inline constexpr uint32_t kSh77xxScifReceiveOffset  = 0xAu;
 
 class Sh77xxCpg;
 class Sh77xxFrqcr;
@@ -35,6 +38,26 @@ struct Sh77xxScifChannel {
     bool             irda;
 };
 
+inline constexpr Sh77xxScifChannel kSh77xxIrdaChannel{kSh77xxIrdaBase,
+                                                      "IrDA",
+                                                      Sh77xxIntcSource::kEri1,
+                                                      Sh77xxIntcSource::kRxi1,
+                                                      Sh77xxIntcSource::kBri1,
+                                                      Sh77xxIntcSource::kTxi1,
+                                                      0x01u,
+                                                      2u,
+                                                      true};
+
+inline constexpr Sh77xxScifChannel kSh77xxScif2Channel{kSh77xxScif2Base,
+                                                       "SCIF2",
+                                                       Sh77xxIntcSource::kEri2,
+                                                       Sh77xxIntcSource::kRxi2,
+                                                       Sh77xxIntcSource::kBri2,
+                                                       Sh77xxIntcSource::kTxi2,
+                                                       0x02u,
+                                                       4u,
+                                                       false};
+
 class Sh77xxScif : public Peripheral, public SerialLine {
 public:
     explicit Sh77xxScif(CerfEmulator& emu);
@@ -44,7 +67,7 @@ public:
     void OnShutdown() override;
 
     uint32_t MmioBase() const override { return Channel().base; }
-    uint32_t MmioSize() const override { return 0x10u; }
+    uint32_t MmioSize() const override { return kSh77xxScifWindowBytes; }
 
     uint8_t  ReadByte(uint32_t addr) override;
     void     WriteByte(uint32_t addr, uint8_t value) override;

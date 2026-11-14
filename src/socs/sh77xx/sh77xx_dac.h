@@ -9,6 +9,8 @@
 
 namespace cerfcore {
 
+inline constexpr uint32_t kSh77xxDacBase = 0x040000A0u;
+
 class Sh77xxDac : public Peripheral {
 public:
     using Peripheral::Peripheral;

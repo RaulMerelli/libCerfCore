@@ -8,6 +8,7 @@
 #include "../../cpu/physical_bus.h"
 #include "../../execution/engine_bridge.h"
 #include "../../peripherals/peripheral_dispatcher.h"
+#include "sh77xx_dma_address_map.h"
 #include "sh77xx_intc.h"
 #include "sh77xx_standby_entry.h"
 
@@ -40,12 +41,7 @@ constexpr uint32_t kIllegalField  = 3u;
 constexpr uint32_t kRsExternal    = 0x0u;
 constexpr uint32_t kRsAuto        = 0x4u;
 constexpr uint32_t kRsModuleFirst = 0xAu;
-constexpr uint32_t kRsIrdaTx      = 0xAu;
-constexpr uint32_t kRsIrdaRx      = 0xBu;
-constexpr uint32_t kRsScifTx      = 0xCu;
-constexpr uint32_t kRsScifRx      = 0xDu;
-constexpr uint32_t kRsAd          = 0xEu;
-constexpr uint32_t kRsSerialLast  = kRsScifRx;
+constexpr uint32_t kRsSerialLast  = kRsModuleFirst + static_cast<uint32_t>(Sh77xxDmaRequest::kScifRx);
 
 constexpr uint16_t kDmaorDme     = 0x0001u;
 constexpr uint16_t kDmaorStored  = 0x0301u;
@@ -56,30 +52,6 @@ constexpr uint8_t kFixedOrder[3][4] = {{0u, 1u, 2u, 3u}, {0u, 2u, 3u, 1u}, {2u, 
 
 constexpr uint32_t kTcrMask      = 0x00FFFFFFu;
 constexpr uint32_t kReloadPeriod = 4u;
-constexpr uint32_t kPhysicalMask = 0x1FFFFFFFu;
-constexpr uint32_t kAreaShift    = 29u;
-constexpr uint32_t kNoShadow     = 7u;
-constexpr uint32_t kArea1First   = 0x04000000u;
-constexpr uint32_t kArea1End     = 0x08000000u;
-constexpr uint32_t kArea7        = 0x1C000000u;
-
-struct PaRange {
-    uint32_t first;
-    uint32_t end;
-};
-
-constexpr PaRange kAdRange        = {0x04000080u, 0x04000094u};
-constexpr PaRange kAdDataRange    = {0x04000080u, 0x04000090u};
-constexpr PaRange kDaRange        = {0x040000A0u, 0x040000A6u};
-constexpr PaRange kPortRange      = {0x04000100u, 0x04000138u};
-constexpr PaRange kIrdaRange      = {0x04000140u, 0x04000150u};
-constexpr PaRange kScifRange      = {0x04000150u, 0x04000160u};
-constexpr PaRange kDmaReachable[] = {kAdRange, kDaRange, kPortRange, kIrdaRange, kScifRange};
-
-constexpr uint32_t kIrdaTdr = 0x04000146u;
-constexpr uint32_t kIrdaRdr = 0x0400014Au;
-constexpr uint32_t kScifTdr = 0x04000156u;
-constexpr uint32_t kScifRdr = 0x0400015Au;
 
 constexpr uint8_t kStaleSar = 0x1u;
 constexpr uint8_t kStaleDar = 0x2u;
@@ -106,26 +78,18 @@ uint32_t Step(uint32_t mode, uint32_t bytes) {
 
 std::string Name(uint32_t channel, const char* field) { return std::string(kChannelPrefix[channel]) + field; }
 
-bool Inside(const PaRange& range, uint32_t pa, uint32_t bytes) { return pa >= range.first && pa + bytes <= range.end; }
-
-bool DmaReachable(uint32_t pa, uint32_t bytes) {
-    for (const PaRange& range : kDmaReachable) {
-        if (Inside(range, pa, bytes)) return true;
-    }
-    return false;
-}
-
 }
 
 void Sh77xxDmac::OnReady() {
     intc_      = &emu_.Get<Sh77xxIntc>();
     stbcr2_    = &emu_.Get<Sh77xxStbcr2>();
     bus_       = &emu_.Get<PhysicalBus>();
+    addresses_ = &emu_.Get<Sh77xxDmaAddressMap>();
     coherence_ = &emu_.Get<EngineBridge>().Engine().Get<cerfengine::ShBusMasterCoherence>();
     stbcr2_->RegisterChangeListener([this](uint8_t from, uint8_t to) {
         if ((from & kStbcr2Mstp7) != 0u && (to & kStbcr2Mstp7) == 0u) Service();
     });
-    emu_.Get<Sh77xxStandbyEntry>().RegisterListener([this] { Initialize(); });
+    emu_.Get<Sh77xxStandbyEntry>().RegisterListener([this] { EnterStandby(); });
     emu_.Get<GuestCpuReset>().RegisterResetListener([this](ResetLineKind) {
         Initialize();
         rr_first_ = 0u;
@@ -274,7 +238,8 @@ void Sh77xxDmac::ValidateFields(const Channel& ch) {
     }
     if (ChcrField(ch.chcr, kChcrTsShift) == kIllegalField || ChcrField(ch.chcr, kChcrSmShift) == kIllegalField ||
         ChcrField(ch.chcr, kChcrDmShift) == kIllegalField) {
-        fatal.Die("Sh77xxDmac: channel %u enabled with the illegal CHCR 0x%08X", i, ch.chcr);
+        fatal.Die("Sh77xxDmac: channel %u enabled with CHCR 0x%08X, a TS / SM / DM setting it does not model", i,
+                  ch.chcr);
     }
     if (rs >= kRsModuleFirst && rs <= kRsSerialLast && (ch.chcr & kChcrTm) != 0u) {
         fatal.Die("Sh77xxDmac: channel %u enabled in burst mode for the serial request source 0x%X", i, rs);
@@ -308,22 +273,12 @@ void Sh77xxDmac::ValidateStart(const Channel& ch) {
 }
 
 void Sh77xxDmac::ValidateRequestRegister(const Channel& ch, uint32_t rs) {
-    const uint32_t sar = ch.sar & kPhysicalMask;
-    const uint32_t dar = ch.dar & kPhysicalMask;
-    bool           ok  = true;
-    switch (rs) {
-        case kRsIrdaTx: ok = dar == kIrdaTdr; break;
-        case kRsIrdaRx: ok = sar == kIrdaRdr; break;
-        case kRsScifTx: ok = dar == kScifTdr; break;
-        case kRsScifRx: ok = sar == kScifRdr; break;
-        case kRsAd: ok = Inside(kAdDataRange, sar, 1u); break;
-        default: break;
-    }
-    if (!ok) {
-        emu_.Get<Fatal>().Die("Sh77xxDmac: channel %u requested by RS 0x%X with SAR 0x%08X and DAR 0x%08X off the data "
-                              "register of the requesting module",
-                              Index(ch), rs, ch.sar, ch.dar);
-    }
+    if (rs < kRsModuleFirst) return;
+    const auto source = static_cast<Sh77xxDmaRequest>(rs - kRsModuleFirst);
+    if (addresses_->NamesDataRegister(source, ch.sar, ch.dar)) return;
+    emu_.Get<Fatal>().Die("Sh77xxDmac: channel %u requested by RS 0x%X with SAR 0x%08X and DAR 0x%08X off the data "
+                          "register of the requesting module",
+                          Index(ch), rs, ch.sar, ch.dar);
 }
 
 int Sh77xxDmac::Pick() {
@@ -393,29 +348,8 @@ void Sh77xxDmac::TransferUnit(Channel& ch) {
     Drive(ch);
 }
 
-uint32_t Sh77xxDmac::BusAddress(const Channel& ch, uint32_t addr, uint32_t bytes, const char* side) {
-    const uint32_t i = Index(ch);
-    if (addr % bytes != 0u) {
-        emu_.Get<Fatal>().Die("Sh77xxDmac: channel %u %s address 0x%08X is not aligned to %u bytes", i, side, addr,
-                              bytes);
-    }
-    const uint32_t pa = addr & kPhysicalMask;
-    if (pa >= kArea7) {
-        emu_.Get<Fatal>().Die("Sh77xxDmac: channel %u %s address 0x%08X is in reserved area 7", i, side, addr);
-    }
-    if ((addr >> kAreaShift) == kNoShadow) {
-        emu_.Get<Fatal>().Die("Sh77xxDmac: channel %u %s address 0x%08X is in no area of the physical map", i, side,
-                              addr);
-    }
-    if (pa >= kArea1First && pa < kArea1End && !DmaReachable(pa, bytes)) {
-        emu_.Get<Fatal>().Die("Sh77xxDmac: channel %u %s address 0x%08X is an on-chip register the DMAC may not access",
-                              i, side, addr);
-    }
-    return pa;
-}
-
 uint32_t Sh77xxDmac::BusRead(const Channel& ch, uint32_t addr, uint32_t bytes) {
-    const uint32_t pa    = BusAddress(ch, addr, bytes, "read");
+    const uint32_t pa    = addresses_->BusAddress(Index(ch), addr, bytes, "read");
     uint32_t       value = 0u;
     if (!bus_->Read(pa, static_cast<MmioWidth>(bytes), &value)) {
         emu_.Get<Fatal>().Die("Sh77xxDmac: channel %u reads %u bytes at unmapped PA 0x%08X", Index(ch), bytes, pa);
@@ -424,7 +358,7 @@ uint32_t Sh77xxDmac::BusRead(const Channel& ch, uint32_t addr, uint32_t bytes) {
 }
 
 void Sh77xxDmac::BusWrite(const Channel& ch, uint32_t addr, uint32_t bytes, uint32_t value) {
-    const uint32_t pa = BusAddress(ch, addr, bytes, "write");
+    const uint32_t pa = addresses_->BusAddress(Index(ch), addr, bytes, "write");
     if (!bus_->Write(pa, static_cast<MmioWidth>(bytes), value)) {
         emu_.Get<Fatal>().Die("Sh77xxDmac: channel %u writes %u bytes of 0x%08X at unmapped PA 0x%08X", Index(ch),
                               bytes, value, pa);
@@ -435,6 +369,14 @@ void Sh77xxDmac::BusWrite(const Channel& ch, uint32_t addr, uint32_t bytes, uint
 void Sh77xxDmac::Drive(const Channel& ch) {
     const auto source = static_cast<Sh77xxIntcSource>(static_cast<uint32_t>(Sh77xxIntcSource::kDei0) + Index(ch));
     intc_->SetSourceRequest(source, (ch.chcr & (kChcrTe | kChcrIe)) == (kChcrTe | kChcrIe));
+}
+
+void Sh77xxDmac::EnterStandby() {
+    if (!ChannelsHeldInStandby()) {
+        Initialize();
+        return;
+    }
+    WriteDmaor(0u);
 }
 
 void Sh77xxDmac::Initialize() {

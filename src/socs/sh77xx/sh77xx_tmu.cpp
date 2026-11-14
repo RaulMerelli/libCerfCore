@@ -6,6 +6,7 @@
 #include <cerfcore/socs/guest_cpu_reset.h>
 #include <cerfcore/state/state_stream.h>
 #include "../../peripherals/peripheral_dispatcher.h"
+#include "sh77xx_frqcr.h"
 
 #include <cstdint>
 #include <string>
@@ -69,6 +70,9 @@ void Sh77xxTmu::OnReady() {
     });
     emu_.Get<Sh77xxStandbyEntry>().RegisterListener([this] { StopPeripheralClockChannels(); });
     stbcr_->RegisterChangeListener([this](uint8_t from, uint8_t to) { OnStandbyControlChange(from, to); });
+    emu_.Get<Sh77xxFrqcr>().RegisterChangeListener([this](uint16_t from, uint16_t to) {
+        if (((from ^ to) & kSh77xxFrqcrStc) != 0u) StopPeripheralClockChannels();
+    });
     rtc_->RegisterRtcclkListener([this] {
         for (Channel& ch : ch_) {
             if (Rtcclk(ch)) Arm(ch);

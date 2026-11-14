@@ -26,8 +26,7 @@ constexpr uint8_t kGroup        = 0x04u;
 constexpr uint8_t kGroupChannel = 0x03u;
 constexpr uint8_t kStoredStatus = 0x5Fu;
 
-constexpr uint8_t kTriggerEnable   = 0xC0u;
-constexpr uint8_t kControlReadOnes = 0x3Fu;
+constexpr uint8_t kTriggerEnable = 0xC0u;
 
 constexpr uint8_t kStbcr2Mstp5 = 0x04u;
 
@@ -48,9 +47,9 @@ void Sh77xxAdc::OnReady() {
 
 uint8_t Sh77xxAdc::ReadByte(uint32_t addr) {
     const uint32_t off = addr - MmioBase();
-    if (off < kOffControlStatus && (off & 1u) == 0u) return ReadData(off);
+    if (off < kSh77xxAdcDataBytes && (off & 1u) == 0u) return ReadData(off);
     if (off == kOffControlStatus) return ReadControlStatus();
-    if (off == kOffControl) return static_cast<uint8_t>(trigger_ | kControlReadOnes);
+    if (off == kOffControl) return static_cast<uint8_t>(adcr_ | Control().read_ones);
     HaltUnsupportedAccess("ReadByte", addr, 0u);
 }
 
@@ -61,7 +60,8 @@ void Sh77xxAdc::WriteByte(uint32_t addr, uint8_t value) {
         return;
     }
     if (off == kOffControl) {
-        trigger_ = static_cast<uint8_t>(value & kTriggerEnable);
+        if ((value & Control().write_zero) != 0u) HaltUnsupportedAccess("WriteByte", addr, value);
+        adcr_ = static_cast<uint8_t>(value & Control().stored);
         return;
     }
     HaltUnsupportedAccess("WriteByte", addr, value);
@@ -101,7 +101,7 @@ void Sh77xxAdc::WriteControlStatus(uint8_t value) {
 }
 
 void Sh77xxAdc::ExternalTrigger() {
-    if (trigger_ != kTriggerEnable) return;
+    if ((adcr_ & kTriggerEnable) != kTriggerEnable) return;
     Convert();
     Drive();
 }
@@ -110,6 +110,10 @@ void Sh77xxAdc::Convert() {
     if (stbcr2_->ModuleStopped(kStbcr2Mstp5)) {
         emu_.Get<Fatal>().Die("Sh77xxAdc: conversion with ADCSR 0x%02X while STBCR2 MSTP5 stops the A/D clock",
                               control_ | kAdst);
+    }
+    if ((control_ & kMulti) != 0u && (adcr_ & Control().scan) != 0u) {
+        emu_.Get<Fatal>().Die("Sh77xxAdc: scan-mode conversion with ADCSR 0x%02X and ADCR 0x%02X", control_ | kAdst,
+                              adcr_);
     }
     const uint32_t channel = control_ & kChannel;
     if ((control_ & kMulti) != 0u) {
@@ -141,7 +145,7 @@ void Sh77xxAdc::Drive() {
 void Sh77xxAdc::Initialize() {
     for (uint16_t& data : data_) data = 0u;
     control_     = 0u;
-    trigger_     = 0u;
+    adcr_        = 0u;
     temp_loaded_ = false;
     ClearEndFlag();
     Drive();
@@ -150,7 +154,7 @@ void Sh77xxAdc::Initialize() {
 void Sh77xxAdc::SaveState(StateWriter& w) {
     for (uint32_t i = 0u; i < kDataRegisters; ++i) w.Write(kDataNames[i], data_[i]);
     w.Write("control", control_);
-    w.Write("trigger", trigger_);
+    w.Write("adcr", adcr_);
     w.Write("temp", temp_);
     w.Write("end", end_);
     w.Write("end_read", end_read_);
@@ -160,7 +164,7 @@ void Sh77xxAdc::SaveState(StateWriter& w) {
 void Sh77xxAdc::RestoreState(StateReader& r) {
     for (uint32_t i = 0u; i < kDataRegisters; ++i) r.Read(kDataNames[i], data_[i]);
     r.Read("control", control_);
-    r.Read("trigger", trigger_);
+    r.Read("adcr", adcr_);
     r.Read("temp", temp_);
     r.Read("end", end_);
     r.Read("end_read", end_read_);

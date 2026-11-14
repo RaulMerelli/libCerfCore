@@ -13,6 +13,9 @@ public:
     using Sh77xxDmac::Sh77xxDmac;
 
     bool ShouldRegister() override { return emu_.Get<BoardContext>().GetSocId() == SocId::Sh7709; }
+
+protected:
+    bool ChannelsHeldInStandby() const override { return false; }
 };
 
 }

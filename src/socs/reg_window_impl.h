@@ -55,6 +55,7 @@ struct RegSpec {
     uint16_t   undefined_on_other_reset = 0u;
     uint16_t   undefined_on_power_on    = 0u;
     bool       low_lane                 = false;
+    bool       drop_low_lane_write      = false;
 };
 
 struct RegWindowModel {
@@ -282,7 +283,10 @@ private:
         const GuestAccess guest{addr, value, 0u, &kByteAccessNames, lane, !M.byte_lanes};
         std::lock_guard<Lock> lk(lock_);
         const uint32_t i = RegIndex(M.byte_lanes ? addr & ~1u : addr, guest.names->write, guest);
-        if (guest.low_lane && !M.reg[i].low_lane) this->HaltUnsupportedAccess(guest.names->write, addr, value);
+        if (guest.low_lane && !M.reg[i].low_lane) {
+            if (M.reg[i].drop_low_lane_write) return;
+            this->HaltUnsupportedAccess(guest.names->write, addr, value);
+        }
         WriteIndexed(i, M.reg[i].write == WriteKind::kStored ? static_cast<uint16_t>((reg_[i] & ~lane) | bits) : bits,
                      guest);
     }

@@ -18,9 +18,6 @@ namespace cerfcore {
 
 namespace sh77xx_port_data {
 
-inline constexpr uint32_t kDataBase  = 0x04000120u;
-inline constexpr uint32_t kRegStride = 2u;
-
 inline constexpr const char* kPortNames[kSh77xxPortCount] = {"A", "B", "C", "D", "E", "F",
                                                              "G", "H", "J", "K", "L", "SC"};
 
@@ -63,15 +60,12 @@ public:
             if (kind == ResetLineKind::Rtc) ResetLatches();
         });
         reset.RegisterResetReleaseListener([this] { TrackDrive(); });
-        pfc_->AddControlListener([this] {
-            RequireIntcPinsUndriven();
-            TrackDrive();
-        });
+        pfc_->AddControlListener([this] { TrackDrive(); });
         TrackDrive();
     }
 
-    uint32_t MmioBase() const override { return kDataBase; }
-    uint32_t MmioSize() const override { return kSh77xxPortCount * kRegStride; }
+    uint32_t MmioBase() const override { return kSh77xxPortDataBase; }
+    uint32_t MmioSize() const override { return kSh77xxPortCount * kSh77xxPortDataStride; }
 
     PinDrive Drive(uint32_t port, uint32_t pin) const override {
         const PortData& p    = M.port[port];
@@ -151,6 +145,7 @@ public:
 private:
     void TrackDrive() {
         wiring_->TrackDrive(*this);
+        PublishDrivenIntcPins();
         this->NotifyDriveChanged();
     }
 
@@ -158,17 +153,25 @@ private:
         return static_cast<Sh77xxIntcPin>(static_cast<uint32_t>(p.intc_first) + pin - LowestPin(p.intc_pins));
     }
 
-    void RequireIntcPinsUndriven() {
+    void PublishDrivenIntcPins() {
+        uint32_t driven = 0u;
+        uint32_t high   = 0u;
         for (uint32_t port = 0; port < kSh77xxPortCount; ++port) {
             for (uint32_t pin = 0; pin < kSh77xxPortPins; ++pin) {
                 if (((M.port[port].intc_pins >> pin) & 1u) == 0u) continue;
                 const PinDrive drive = Drive(port, pin);
-                if (drive != PinDrive::kPulledUp && drive != PinDrive::kUndriven) {
-                    this->emu_.template Get<Fatal>().Die("Sh77xxPortData: port %s pin %u drives its INTC input",
-                                                         kPortNames[port], pin);
+                if (drive == PinDrive::kFunction) {
+                    this->emu_.template Get<Fatal>().Die(
+                        "Sh77xxPortData: port %s pin %u drives its INTC input from another function", kPortNames[port],
+                        pin);
                 }
+                if (drive != PinDrive::kHigh && drive != PinDrive::kLow) continue;
+                const uint32_t bit = 1u << static_cast<uint32_t>(IntcPin(M.port[port], pin));
+                driven |= bit;
+                if (drive == PinDrive::kHigh) high |= bit;
             }
         }
+        intc_->SetPortDrive(driven, high);
     }
 
     void ResetLatches() {
@@ -178,9 +181,9 @@ private:
     }
 
     uint32_t Port(uint32_t addr, const char* op, uint32_t value) {
-        const uint32_t off = addr - kDataBase;
-        if ((off % kRegStride) != 0u) this->HaltUnsupportedAccess(op, addr, value);
-        return off / kRegStride;
+        const uint32_t off = addr - kSh77xxPortDataBase;
+        if ((off % kSh77xxPortDataStride) != 0u) this->HaltUnsupportedAccess(op, addr, value);
+        return off / kSh77xxPortDataStride;
     }
 
     Sh77xxPfc*        pfc_                     = nullptr;

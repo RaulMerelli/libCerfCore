@@ -58,6 +58,7 @@ public:
 
     virtual void SetSourceRequest(Sh77xxIntcSource source, bool asserted) = 0;
     virtual void SetPinLevel(Sh77xxIntcPin pin, bool high)                = 0;
+    virtual void SetPortDrive(uint32_t driven_pins, uint32_t driven_high) = 0;
     virtual bool PinLevel(Sh77xxIntcPin pin)                              = 0;
     virtual bool WakesStandby(Sh77xxIntcSource source)                    = 0;
 

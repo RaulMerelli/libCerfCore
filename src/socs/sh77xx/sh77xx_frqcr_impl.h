@@ -24,10 +24,10 @@ using cerf_reg_window_detail::WriteKind;
 inline constexpr uint32_t kFrqcrPa = 0x1FFFFF80u;
 inline constexpr uint16_t kCkoen   = 1u << 8;
 
-constexpr RegWindowModel Window(uint16_t writable, uint16_t write_zero) {
+constexpr RegWindowModel Window(uint16_t writable, uint16_t write_zero, bool drop_low_lane_write) {
     RegWindowModel w{kFrqcrPa, 2u, 1u, false, {}, 2u};
     w.reg[0] = RegSpec{ReadKind::kStored, WriteKind::kStored, writable, kSh77xxFrqcrReset, write_zero,
-                       OtherReset::kRetain};
+                       OtherReset::kRetain, 0u, 0u, false, drop_low_lane_write};
     return w;
 }
 
@@ -60,8 +60,9 @@ protected:
         if ((value & kCkoen) == 0u) {
             this->emu_.template Get<Fatal>().Die("Sh77xxFrqcr: FRQCR write 0x%04X clears CKOEN", value);
         }
-        Apply(value);
     }
+
+    void AfterStore(uint32_t) override { Apply(this->StoredReg(0)); }
 
 private:
     void SetCpuRate(uint16_t frqcr) {

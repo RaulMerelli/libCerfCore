@@ -10,6 +10,9 @@
 
 namespace cerfcore {
 
+inline constexpr uint32_t kSh77xxPortDataBase   = 0x04000120u;
+inline constexpr uint32_t kSh77xxPortDataStride = 2u;
+
 class Sh77xxPortData : public Peripheral {
 public:
     using Peripheral::Peripheral;

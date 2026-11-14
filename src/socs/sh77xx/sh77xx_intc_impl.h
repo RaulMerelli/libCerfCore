@@ -160,15 +160,16 @@ public:
 
     void SetPinLevel(Sh77xxIntcPin pin, bool high) override {
         std::lock_guard<std::mutex> lk(mtx_);
-        const uint32_t n        = static_cast<uint32_t>(pin);
-        const bool     was_high = PinHigh(n);
-        if (was_high == high) return;
-        pin_high_ ^= 1u << n;
-        if (n < kIrqPins && !IrqIsIrl(n) && !reset_->Delivering()) {
-            const uint32_t sense = IrqSense(n);
-            if ((sense == kSenseFalling && was_high) || (sense == kSenseRising && !was_high)) irq_latch_ |= 1u << n;
-        }
-        PublishLocked();
+        const uint32_t bit = 1u << static_cast<uint32_t>(pin);
+        net_high_          = high ? (net_high_ | bit) : (net_high_ & ~bit);
+        ApplyPinLevelsLocked();
+    }
+
+    void SetPortDrive(uint32_t driven_pins, uint32_t driven_high) override {
+        std::lock_guard<std::mutex> lk(mtx_);
+        drive_pins_ = driven_pins;
+        drive_high_ = driven_high & driven_pins;
+        ApplyPinLevelsLocked();
     }
 
     bool PinLevel(Sh77xxIntcPin pin) override {
@@ -295,7 +296,9 @@ public:
         w.WriteBytes("ipr", ipr_, sizeof(ipr_));
         w.Write("requests", requests_);
         w.Write("intevt2", intevt2_);
-        w.Write("pin_high", pin_high_);
+        w.Write("pin_net_high", net_high_);
+        w.Write("pin_drive_pins", drive_pins_);
+        w.Write("pin_drive_high", drive_high_);
         w.Write("irq_latch", irq_latch_);
         w.Write("irr0_read_ones", irr0_read_ones_);
     }
@@ -308,9 +311,12 @@ public:
         r.ReadBytes("ipr", ipr_, sizeof(ipr_));
         r.Read("requests", requests_);
         r.Read("intevt2", intevt2_);
-        r.Read("pin_high", pin_high_);
+        r.Read("pin_net_high", net_high_);
+        r.Read("pin_drive_pins", drive_pins_);
+        r.Read("pin_drive_high", drive_high_);
         r.Read("irq_latch", irq_latch_);
         r.Read("irr0_read_ones", irr0_read_ones_);
+        pin_high_ = PinLevelsLocked();
     }
 
     void PostRestore() override {
@@ -352,6 +358,22 @@ private:
     }
 
     bool     PinHigh(uint32_t n) const { return ((pin_high_ >> n) & 1u) != 0u; }
+
+    uint32_t PinLevelsLocked() const { return (net_high_ & ~drive_pins_) | drive_high_; }
+
+    void ApplyPinLevelsLocked() {
+        const uint32_t levels  = PinLevelsLocked();
+        const uint32_t changed = levels ^ pin_high_;
+        if (changed == 0u) return;
+        for (uint32_t n = 0; n < kIrqPins; ++n) {
+            if (((changed >> n) & 1u) == 0u || IrqIsIrl(n) || reset_->Delivering()) continue;
+            const bool     was_high = PinHigh(n);
+            const uint32_t sense    = IrqSense(n);
+            if ((sense == kSenseFalling && was_high) || (sense == kSenseRising && !was_high)) irq_latch_ |= 1u << n;
+        }
+        pin_high_ = levels;
+        PublishLocked();
+    }
     uint32_t IrqSense(uint32_t n) const { return (icr1_ >> (2u * n)) & 3u; }
     bool     IrqIsIrl(uint32_t n) const { return (icr1_ & kIcr1IrqLevel) != 0u && n < kIrlPins; }
 
@@ -427,6 +449,9 @@ private:
     uint32_t                        requests_       = 0u;
     uint32_t                        intevt2_        = 0u;
     uint32_t                        pin_high_       = kAllPinsHigh;
+    uint32_t                        net_high_       = kAllPinsHigh;
+    uint32_t                        drive_pins_     = 0u;
+    uint32_t                        drive_high_     = 0u;
     uint32_t                        irq_latch_      = 0u;
     uint32_t                        irr0_read_ones_ = 0u;
 };

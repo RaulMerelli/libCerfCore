@@ -13,6 +13,9 @@ public:
     using Sh77xxAdc::Sh77xxAdc;
 
     bool ShouldRegister() override { return emu_.Get<BoardContext>().GetSocId() == SocId::Sh7709; }
+
+protected:
+    ControlModel Control() const override { return ControlModel{0xC0u, 0x3Fu, 0x00u, 0x00u}; }
 };
 
 }

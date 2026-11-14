@@ -16,7 +16,6 @@ struct Sh77xxFrqcrSetting {
     uint16_t frqcr;
     uint8_t  cpu_per_ckio;
     uint8_t  ckio_per_pclk;
-    uint8_t  pll1;
 };
 
 struct Sh77xxCpgModel {
@@ -44,8 +43,6 @@ public:
     GuestCycleClock::Rate PeripheralRate(uint16_t frqcr) const override {
         return GuestCycleClock::Rate{emu_.Get<ShBoardClock>().CkioHz(), Setting(frqcr).ckio_per_pclk};
     }
-
-    uint8_t Pll1Multiplier(uint16_t frqcr) const override { return Setting(frqcr).pll1; }
 
 private:
     const Sh77xxFrqcrSetting& Setting(uint16_t frqcr) const {

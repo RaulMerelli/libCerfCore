@@ -12,6 +12,7 @@ class ShBusMasterCoherence;
 namespace cerfcore {
 
 class PhysicalBus;
+class Sh77xxDmaAddressMap;
 class Sh77xxIntc;
 
 enum class Sh77xxDmaRequest : uint8_t {
@@ -47,6 +48,9 @@ public:
     void SaveState(StateWriter& w) override;
     void RestoreState(StateReader& r) override;
     void PostRestore() override;
+
+protected:
+    virtual bool ChannelsHeldInStandby() const = 0;
 
 private:
     static constexpr uint32_t kChannels = 4u;
@@ -84,13 +88,14 @@ private:
     void     TransferUnit(Channel& ch);
     uint32_t BusRead(const Channel& ch, uint32_t addr, uint32_t bytes);
     void     BusWrite(const Channel& ch, uint32_t addr, uint32_t bytes, uint32_t value);
-    uint32_t BusAddress(const Channel& ch, uint32_t addr, uint32_t bytes, const char* side);
     void     Drive(const Channel& ch);
+    void     EnterStandby();
     void     Initialize();
 
     Sh77xxIntc*   intc_   = nullptr;
     Sh77xxStbcr2* stbcr2_ = nullptr;
     PhysicalBus*  bus_    = nullptr;
+    Sh77xxDmaAddressMap*              addresses_ = nullptr;
     cerfengine::ShBusMasterCoherence* coherence_ = nullptr;
     Channel       ch_[kChannels];
     uint16_t      dmaor_           = 0u;
