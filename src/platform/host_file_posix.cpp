@@ -13,7 +13,6 @@
 #include <sys/mount.h>
 #endif
 
-#include "host_fd_handle.h"
 #include "host_path_open.h"
 #include "host_unimplemented.h"
 
@@ -56,36 +55,37 @@ int OpenFlags(FileMode mode) {
 HostFile::~HostFile() { Close(); }
 
 bool HostFile::Open(const std::string& path, FileMode mode) {
-    const int fd = OpenHostPath(path, OpenFlags(mode) | O_CLOEXEC, 0666);
-    if (fd < 0) return false;
-    handle_ = HandleOf(fd);
+    HostDescriptor descriptor = OpenHostPath(path, OpenFlags(mode) | O_CLOEXEC, 0666);
+    if (!descriptor.Valid()) return false;
+    handle_ = new HostDescriptor(std::move(descriptor));
     return true;
 }
 
-void HostFile::Close() {
-    if (handle_) {
-        ::close(FdOf(handle_));
-        handle_ = nullptr;
-    }
+bool HostFile::Close() {
+    auto* descriptor = static_cast<HostDescriptor*>(std::exchange(handle_, nullptr));
+    if (descriptor == nullptr) return true;
+    const bool closed = descriptor->Close();
+    delete descriptor;
+    return closed;
 }
 
 bool HostFile::Size(uint64_t& size) const {
     struct stat st {};
-    if (::fstat(FdOf(handle_), &st) != 0) return false;
+    if (::fstat(DescriptorOf(handle_).Fd(), &st) != 0) return false;
     size = static_cast<uint64_t>(st.st_size);
     return true;
 }
 
 bool HostFile::SeekTo(uint64_t offset) {
-    return ::lseek(FdOf(handle_), static_cast<off_t>(offset), SEEK_SET) >= 0;
+    return ::lseek(DescriptorOf(handle_).Fd(), static_cast<off_t>(offset), SEEK_SET) >= 0;
 }
 
-bool HostFile::SeekToEnd() { return ::lseek(FdOf(handle_), 0, SEEK_END) >= 0; }
+bool HostFile::SeekToEnd() { return ::lseek(DescriptorOf(handle_).Fd(), 0, SEEK_END) >= 0; }
 
 bool HostFile::Read(void* dst, uint32_t length, uint32_t& done) {
     done = 0;
     while (done < length) {
-        const ssize_t n = ::read(FdOf(handle_), static_cast<uint8_t*>(dst) + done, length - done);
+        const ssize_t n = ::read(DescriptorOf(handle_).Fd(), static_cast<uint8_t*>(dst) + done, length - done);
         if (n < 0) {
             if (errno == EINTR) continue;
             return false;
@@ -100,7 +100,7 @@ bool HostFile::Write(const void* src, uint32_t length, uint32_t& done) {
     done = 0;
     while (done < length) {
         const ssize_t n =
-            ::write(FdOf(handle_), static_cast<const uint8_t*>(src) + done, length - done);
+            ::write(DescriptorOf(handle_).Fd(), static_cast<const uint8_t*>(src) + done, length - done);
         if (n < 0) {
             if (errno == EINTR) continue;
             return false;
@@ -116,7 +116,7 @@ void HostFile::MarkSparse() {}
 bool HostFile::ZeroRange(uint64_t begin, uint64_t end) {
     if (end <= begin) return true;
 #if defined(__linux__)
-    const int fd = FdOf(handle_);
+    const int fd = DescriptorOf(handle_).Fd();
     for (;;) {
         if (::fallocate(fd, FALLOC_FL_PUNCH_HOLE | FALLOC_FL_KEEP_SIZE,
                         static_cast<off_t>(begin), static_cast<off_t>(end - begin)) == 0)
@@ -129,7 +129,7 @@ bool HostFile::ZeroRange(uint64_t begin, uint64_t end) {
     if (!Size(size)) return false;
     return WriteZeros(fd, begin, end < size ? end : size);
 #elif defined(__APPLE__)
-    const int fd   = FdOf(handle_);
+    const int fd   = DescriptorOf(handle_).Fd();
     uint64_t  size = 0;
     if (!Size(size)) return false;
     const uint64_t stop = end < size ? end : size;

@@ -161,7 +161,7 @@ private:
 
 class PosixSharedFile : public FdSharedFile {
 public:
-    PosixSharedFile(int fd, int lock_fd) : FdSharedFile(fd), lock_fd_(lock_fd) {}
+    PosixSharedFile(int fd, int lock_fd) : FdSharedFile(HostDescriptor(fd, nullptr)), lock_fd_(lock_fd) {}
     ~PosixSharedFile() override {
         if (lock_fd_ != Fd()) close(lock_fd_);
     }

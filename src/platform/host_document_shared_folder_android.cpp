@@ -2,6 +2,7 @@
 
 #include "host_document_handles.h"
 #include "host_entry_stat.h"
+#include "host_path_open.h"
 #include "host_share_modes.h"
 #include "host_shared_entry.h"
 #include "host_shared_path_resolve.h"
@@ -162,11 +163,11 @@ public:
         st = Locate(path, chain);
         if (!st.Ok()) return st;
         const DocumentNode& target = chain.back();
-        const int           fd     = host::OpenHostDocument(target.uri, target.info.directory ? "r" : "rw");
-        if (fd < 0) return DocumentError(errno);
-        const int result = futimens(fd, times);
+        HostDescriptor descriptor = OpenHostDocumentDescriptor(target.uri, target.info.directory ? "r" : "rw");
+        if (!descriptor.Valid()) return DocumentError(errno);
+        const int result = futimens(descriptor.Fd(), times);
         const int err    = errno;
-        close(fd);
+        descriptor.Close();
         if (result != 0) return DocumentError(err);
         return {};
     }
@@ -189,12 +190,12 @@ public:
     }
 
     SharedFsStatus QuerySpace(uint64_t& total, uint64_t& available) override {
-        const int fd = host::OpenHostDocument(root_, "r");
-        if (fd < 0) return DocumentError(errno);
+        HostDescriptor descriptor = OpenHostDocumentDescriptor(root_, "r");
+        if (!descriptor.Valid()) return DocumentError(errno);
         struct statvfs sv {};
-        const int      result = fstatvfs(fd, &sv);
+        const int      result = fstatvfs(descriptor.Fd(), &sv);
         const int      err    = errno;
-        close(fd);
+        descriptor.Close();
         if (result != 0) return DocumentError(err);
         SharedSpace(sv, total, available);
         return {};
@@ -249,15 +250,13 @@ public:
         const ShareClaim claim = ShareClaimFor(access, share);
         if (table_->Conflicts(target.uri, claim)) return SharedStatus(SharedFsError::kSharingViolation, EAGAIN);
         const char* mode = access == SharedFileAccess::kRead ? "r" : access == SharedFileAccess::kWrite ? "w" : "rw";
-        const int   fd   = host::OpenHostDocument(target.uri, mode);
-        if (fd < 0) return DocumentError(errno);
+        HostDescriptor descriptor = OpenHostDocumentDescriptor(target.uri, mode);
+        if (!descriptor.Valid()) return DocumentError(errno);
         struct stat sb {};
-        if (!SetCloseOnExec(fd) || fstat(fd, &sb) != 0 || !S_ISREG(sb.st_mode)) {
-            close(fd);
+        if (!SetCloseOnExec(descriptor.Fd()) || fstat(descriptor.Fd(), &sb) != 0 || !S_ISREG(sb.st_mode))
             return SharedStatus(SharedFsError::kAccessDenied, EACCES);
-        }
         const uint64_t id = table_->Add({target.uri, target.path, claim});
-        file              = std::make_unique<DocumentSharedFile>(fd, table_, id, target.info.writable);
+        file = std::make_unique<DocumentSharedFile>(std::move(descriptor), table_, id, target.info.writable);
         return {};
     }
 

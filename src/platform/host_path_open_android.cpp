@@ -29,15 +29,26 @@ std::string DocumentMode(int flags) {
 
 }
 
-int OpenHostPath(const std::string& path, int flags, mode_t mode) {
-    if (!IsHostDocument(path)) return OpenLocalPath(path, flags, mode);
-    const int fd = host::OpenHostDocument(path, DocumentMode(flags).c_str());
-    if (fd < 0) return -1;
-    if ((flags & O_CLOEXEC) != 0 && !SetCloseOnExec(fd)) {
-        ::close(fd);
-        return -1;
-    }
-    return fd;
+bool HostDescriptor::Close() {
+    bool closed = true;
+    if (fd_ >= 0)
+        closed = document_ != nullptr ? host::CloseHostDocument(HostDocumentDescriptor{fd_, document_})
+                                      : ::close(fd_) == 0;
+    fd_       = -1;
+    document_ = nullptr;
+    return closed;
+}
+
+HostDescriptor OpenHostDocumentDescriptor(const std::string& uri, const char* mode) {
+    const HostDocumentDescriptor document = host::OpenHostDocument(uri, mode);
+    return HostDescriptor(document.fd, document.owner);
+}
+
+HostDescriptor OpenHostPath(const std::string& path, int flags, mode_t mode) {
+    if (!IsHostDocument(path)) return HostDescriptor(OpenLocalPath(path, flags, mode), nullptr);
+    HostDescriptor descriptor = OpenHostDocumentDescriptor(path, DocumentMode(flags).c_str());
+    if (descriptor.Valid() && (flags & O_CLOEXEC) != 0 && !SetCloseOnExec(descriptor.Fd())) return HostDescriptor();
+    return descriptor;
 }
 
 bool StatHostPath(const std::string& path, struct stat& st) {

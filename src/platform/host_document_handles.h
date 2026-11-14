@@ -55,7 +55,8 @@ private:
 
 class DocumentSharedFile : public FdSharedFile {
 public:
-    DocumentSharedFile(int fd, std::shared_ptr<DocumentOpenTable> table, uint64_t id, bool writable);
+    DocumentSharedFile(HostDescriptor descriptor, std::shared_ptr<DocumentOpenTable> table, uint64_t id,
+                       bool writable);
     ~DocumentSharedFile() override;
 
     SharedFsStatus Info(SharedFsInfo& info) override;

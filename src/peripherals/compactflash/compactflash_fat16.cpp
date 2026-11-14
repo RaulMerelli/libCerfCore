@@ -155,7 +155,7 @@ bool CompactFlashFat16Builder::Build(const std::string& out_path,
         return false;
     }
     const bool ok = written == HostWriteResult::kOk;
-    if (!ok) LOG(Caution, "[CF] FAT16 build: short write to image\n");
+    if (!ok) LOG(Caution, "[CF] FAT16 build: cannot write the output image\n");
     else LOG(Cerf, "[CF] FAT16 image built: %u sectors, %u data clusters, %zu file(s)\n",
              total_sectors, data_clusters, entries.size());
     return ok;

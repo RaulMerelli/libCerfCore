@@ -6,7 +6,6 @@
 #include <sys/stat.h>
 #include <unistd.h>
 
-#include "host_fd_handle.h"
 #include "host_path_open.h"
 
 namespace cerfcore {
@@ -14,11 +13,12 @@ namespace cerfcore {
 namespace host_platform {
 
 bool OpenMappedFile(const std::string& path, FileMapping& mapping) {
-    mapping.granularity = static_cast<uint32_t>(::sysconf(_SC_PAGESIZE));
-    const int fd = OpenHostPath(path, O_RDONLY | O_CLOEXEC, 0);
-    if (fd < 0) return false;
-    mapping.file = HandleOf(fd);
+    mapping.granularity       = static_cast<uint32_t>(::sysconf(_SC_PAGESIZE));
+    HostDescriptor descriptor = OpenHostPath(path, O_RDONLY | O_CLOEXEC, 0);
+    if (!descriptor.Valid()) return false;
     struct stat st {};
+    const int   fd = descriptor.Fd();
+    mapping.file   = new HostDescriptor(std::move(descriptor));
     if (::fstat(fd, &st) != 0 || st.st_size <= 0) return false;
     mapping.size    = static_cast<uint64_t>(st.st_size);
     mapping.section = mapping.file;
@@ -26,13 +26,13 @@ bool OpenMappedFile(const std::string& path, FileMapping& mapping) {
 }
 
 void CloseMappedFile(FileMapping& mapping) {
-    if (mapping.file) ::close(FdOf(mapping.file));
+    delete static_cast<HostDescriptor*>(mapping.file);
     mapping.section = nullptr;
     mapping.file    = nullptr;
 }
 
 uint8_t* MapFileView(const FileMapping& mapping, uint64_t offset, size_t length) {
-    void* view = ::mmap(nullptr, length, PROT_READ, MAP_SHARED, FdOf(mapping.section),
+    void* view = ::mmap(nullptr, length, PROT_READ, MAP_SHARED, DescriptorOf(mapping.section).Fd(),
                         static_cast<off_t>(offset));
     return view == MAP_FAILED ? nullptr : static_cast<uint8_t*>(view);
 }

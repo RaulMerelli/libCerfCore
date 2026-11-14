@@ -10,6 +10,7 @@
 
 #include <filesystem>
 #include <system_error>
+#include <utility>
 
 namespace cerfcore {
 
@@ -51,11 +52,9 @@ bool HostFile::Open(const std::string& path, FileMode mode) {
     return true;
 }
 
-void HostFile::Close() {
-    if (handle_) {
-        CloseHandle(static_cast<HANDLE>(handle_));
-        handle_ = nullptr;
-    }
+bool HostFile::Close() {
+    if (handle_ == nullptr) return true;
+    return CloseHandle(static_cast<HANDLE>(std::exchange(handle_, nullptr))) != 0;
 }
 
 bool HostFile::Size(uint64_t& size) const {

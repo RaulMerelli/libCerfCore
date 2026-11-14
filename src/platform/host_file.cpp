@@ -27,7 +27,10 @@ bool ReplaceHostFileContents(const std::string& path, std::string_view bytes, bo
         at += chunk;
     }
     error = written ? 0 : LastErrorCode();
-    file.Close();
+    if (!file.Close() && written) {
+        written = false;
+        error   = LastErrorCode();
+    }
     if (written && ReplaceHostFile(temp, path, write_through)) return true;
     if (written) error = LastErrorCode();
     uint32_t ignored = 0;

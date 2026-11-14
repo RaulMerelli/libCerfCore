@@ -141,7 +141,7 @@ bool CompactFlashFat32Builder::Build(const std::string& out_path,
         return false;
     }
     const bool ok = written == HostWriteResult::kOk;
-    if (!ok) LOG(Caution, "[CF] FAT32 build: short write to image\n");
+    if (!ok) LOG(Caution, "[CF] FAT32 build: cannot write the output image\n");
     else LOG(Cerf, "[CF] FAT32 image built: %u sectors, %zu file(s)\n",
              total_sectors, entries.size());
     return ok;

@@ -24,7 +24,7 @@ public:
     HostFile& operator=(const HostFile&) = delete;
 
     bool Open(const std::string& path, FileMode mode);
-    void Close();
+    bool Close();
     bool IsOpen() const { return handle_ != nullptr; }
 
     bool Size(uint64_t& size) const;

@@ -19,10 +19,16 @@ struct HostDocumentEntry {
     HostDocumentInfo info;
 };
 
+struct HostDocumentDescriptor {
+    int   fd    = -1;
+    void* owner = nullptr;
+};
+
 namespace host {
 
-int  OpenHostDocument(const std::string& uri, const char* mode);
-bool QueryHostDocument(const std::string& uri, HostDocumentInfo& info);
+HostDocumentDescriptor OpenHostDocument(const std::string& uri, const char* mode);
+bool                   CloseHostDocument(const HostDocumentDescriptor& descriptor);
+bool                   QueryHostDocument(const std::string& uri, HostDocumentInfo& info);
 bool ListHostDocumentChildren(const std::string& uri, std::vector<HostDocumentEntry>& children);
 bool CreateHostDocument(const std::string& parent_uri, bool directory, const std::string& name,
                         std::string& created_uri);

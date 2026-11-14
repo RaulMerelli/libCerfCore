@@ -25,11 +25,11 @@ HostWriteResult WriteHostFileBytes(const std::string& path, const uint8_t* data,
     while (size != 0) {
         const uint32_t want = static_cast<uint32_t>(std::min(size, kChunk));
         uint32_t done = 0;
-        if (!file.Write(data, want, done) || done != want) return HostWriteResult::kShortWrite;
+        if (!file.Write(data, want, done) || done != want) return HostWriteResult::kWriteFailed;
         data += done;
         size -= done;
     }
-    return HostWriteResult::kOk;
+    return file.Close() ? HostWriteResult::kOk : HostWriteResult::kWriteFailed;
 }
 
 bool HostFileNonEmpty(const std::string& path) {

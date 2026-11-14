@@ -125,7 +125,13 @@ bool StateWriter::Commit() {
         host_platform::DeleteHostFile(temp_path_, ignored);
         return false;
     }
-    file_.Close();
+    if (!file_.Close()) {
+        const uint32_t gle = host_platform::LastErrorCode();
+        LOG(Caution, "StateWriter: close of '%s' failed gle=%u\n", temp_path_.c_str(), gle);
+        host_platform::DeleteHostFile(temp_path_, ignored);
+        Fail("a write to the state file failed", gle);
+        return false;
+    }
     if (!host_platform::ReplaceHostFile(temp_path_, final_path_, true)) {
         const uint32_t gle = host_platform::LastErrorCode();
         LOG(Caution, "StateWriter: MoveFileEx('%s' -> '%s') failed gle=%u\n",

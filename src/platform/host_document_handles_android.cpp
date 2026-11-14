@@ -56,8 +56,9 @@ SharedFsStatus DocumentSharedFind::Next(SharedFsInfo& info, std::u16string& name
     return {};
 }
 
-DocumentSharedFile::DocumentSharedFile(int fd, std::shared_ptr<DocumentOpenTable> table, uint64_t id, bool writable)
-    : FdSharedFile(fd), table_(std::move(table)), id_(id), writable_(writable) {}
+DocumentSharedFile::DocumentSharedFile(HostDescriptor descriptor, std::shared_ptr<DocumentOpenTable> table,
+                                       uint64_t id, bool writable)
+    : FdSharedFile(std::move(descriptor)), table_(std::move(table)), id_(id), writable_(writable) {}
 
 DocumentSharedFile::~DocumentSharedFile() { table_->Remove(id_); }
 
