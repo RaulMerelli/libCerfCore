@@ -1,10 +1,8 @@
 #include <cerfcore/core/cerf_emulator.h>
-#include <cerfcore/core/fatal.h>
 #include <cerfcore/host/frame_renderer.h>
 #include "guest_additions_frame_renderer.h"
 #include "panel_frame_renderer.h"
 
-#include <algorithm>
 #include <cstdint>
 #include <cstring>
 #include <mutex>
@@ -13,8 +11,6 @@
 namespace cerfcore {
 
 namespace {
-
-constexpr uint32_t kMaxBoxPixels = 0x00FFFFFFu;
 
 class PresentedFrameRenderer : public FrameRenderer {
 public:
@@ -92,146 +88,62 @@ private:
         }
         layer.RenderInto(scratch_.data(), lw, lh);
 
-        const uint32_t fit_x = dst_w / lw;
-        const uint32_t fit_y = dst_h / lh;
-        const uint32_t scale = (fit_x < fit_y) ? fit_x : fit_y;
-
-        std::memset(dst, 0, (size_t)dst_w * dst_h * 4u);
-
-        if (scale == 0) {
-            DownscaleLayer(dst, dst_w, dst_h, lw, lh);
-            return;
+        if (lw != map_src_w_ || lh != map_src_h_ || dst_w != map_dst_w_ || dst_h != map_dst_h_) {
+            uint32_t fit_w, fit_h;
+            if ((uint64_t)dst_w * lh <= (uint64_t)dst_h * lw) {
+                fit_w = dst_w;
+                fit_h = (uint32_t)(((uint64_t)lh * dst_w) / lw);
+            } else {
+                fit_h = dst_h;
+                fit_w = (uint32_t)(((uint64_t)lw * dst_h) / lh);
+            }
+            if (fit_w == 0) fit_w = 1;
+            if (fit_h == 0) fit_h = 1;
+            src_col_.resize(fit_w);
+            src_row_.resize(fit_h);
+            for (uint32_t x = 0; x < fit_w; ++x)
+                src_col_[x] = (uint32_t)(((2ull * x + 1u) * lw) / (2ull * fit_w));
+            for (uint32_t y = 0; y < fit_h; ++y)
+                src_row_[y] = (uint32_t)(((2ull * y + 1u) * lh) / (2ull * fit_h));
+            map_src_w_ = lw;
+            map_src_h_ = lh;
+            map_dst_w_ = dst_w;
+            map_dst_h_ = dst_h;
         }
 
-        const uint32_t out_w = lw * scale;
-        const uint32_t out_h = lh * scale;
+        const uint32_t out_w = (uint32_t)src_col_.size();
+        const uint32_t out_h = (uint32_t)src_row_.size();
         const uint32_t dst_x = (dst_w - out_w) / 2u;
         const uint32_t dst_y = (dst_h - out_h) / 2u;
+
+        std::memset(dst, 0, (size_t)dst_w * dst_h * 4u);
 
         const uint32_t* prev_src_row = nullptr;
         const uint32_t* prev_dst_row = nullptr;
         for (uint32_t y = 0; y < out_h; ++y) {
-            const uint32_t* src_row = scratch_.data() + (size_t)(y / scale) * lw;
+            const uint32_t* src_row = scratch_.data() + (size_t)src_row_[y] * lw;
             uint32_t* dst_row = dst + (size_t)(dst_y + y) * dst_w + dst_x;
             if (src_row == prev_src_row) {
                 std::memcpy(dst_row, prev_dst_row, (size_t)out_w * 4u);
                 continue;
             }
-            if (scale == 1u) {
-                std::memcpy(dst_row, src_row, (size_t)out_w * 4u);
-            } else {
-                for (uint32_t x = 0; x < out_w; ++x)
-                    dst_row[x] = src_row[x / scale];
-            }
+            for (uint32_t x = 0; x < out_w; ++x)
+                dst_row[x] = src_row[src_col_[x]];
             prev_src_row = src_row;
             prev_dst_row = dst_row;
         }
-    }
-
-    void DownscaleLayer(uint32_t* dst, uint32_t dst_w, uint32_t dst_h,
-                        uint32_t lw, uint32_t lh) {
-        uint32_t out_w, out_h;
-        if ((uint64_t)dst_w * lh <= (uint64_t)dst_h * lw) {
-            out_w = dst_w;
-            out_h = (uint32_t)(((uint64_t)lh * dst_w) / lw);
-        } else {
-            out_h = dst_h;
-            out_w = (uint32_t)(((uint64_t)lw * dst_h) / lh);
-        }
-        if (out_w == 0) out_w = 1;
-        if (out_h == 0) out_h = 1;
-
-        const uint32_t w0    = lw / out_w;
-        const uint32_t w_rem = lw % out_w;
-        const uint32_t h0    = lh / out_h;
-        const uint32_t h_rem = lh % out_h;
-        const uint64_t max_box = (uint64_t)(w0 + (w_rem != 0u ? 1u : 0u)) *
-                                 (h0 + (h_rem != 0u ? 1u : 0u));
-        if (max_box > kMaxBoxPixels) {
-            emu_.Get<Fatal>().Die(
-                "PresentedFrameRenderer: %ux%u layer into %ux%u needs a %llu-pixel box",
-                lw, lh, out_w, out_h, (unsigned long long)max_box);
-        }
-
-        uint32_t box_n[2][2];
-        uint32_t box_inv[2][2];
-        for (uint32_t r = 0; r < 2u; ++r) {
-            for (uint32_t c = 0; c < 2u; ++c) {
-                box_n[r][c]   = (h0 + r) * (w0 + c);
-                box_inv[r][c] = 0xFFFFFFFFu / box_n[r][c];
-            }
-        }
-
-        const uint32_t dst_x = (dst_w - out_w) / 2u;
-        const uint32_t dst_y = (dst_h - out_h) / 2u;
-
-        col_x0_.resize((size_t)out_w + 1u);
-        uint32_t x0 = 0, x_frac = 0;
-        for (uint32_t ox = 0; ox < out_w; ++ox) {
-            col_x0_[ox] = x0;
-            x0 += w0;
-            x_frac += w_rem;
-            if (x_frac >= out_w) {
-                x_frac -= out_w;
-                ++x0;
-            }
-        }
-        col_x0_[out_w] = lw;
-        acc_.resize((size_t)out_w * 4u);
-
-        uint32_t y0 = 0, y_frac = 0;
-        for (uint32_t oy = 0; oy < out_h; ++oy) {
-            uint32_t rows = h0;
-            y_frac += h_rem;
-            if (y_frac >= out_h) {
-                y_frac -= out_h;
-                ++rows;
-            }
-            std::fill(acc_.begin(), acc_.end(), 0u);
-            for (uint32_t sy = y0; sy < y0 + rows; ++sy) {
-                const uint32_t* src_row = scratch_.data() + (size_t)sy * lw;
-                uint32_t* acc = acc_.data();
-                for (uint32_t ox = 0; ox < out_w; ++ox, acc += 4) {
-                    const uint32_t x1 = col_x0_[ox + 1u];
-                    for (uint32_t sx = col_x0_[ox]; sx < x1; ++sx) {
-                        const uint32_t p = src_row[sx];
-                        acc[0] += p & 0xFFu;
-                        acc[1] += (p >> 8) & 0xFFu;
-                        acc[2] += (p >> 16) & 0xFFu;
-                        acc[3] += p >> 24;
-                    }
-                }
-            }
-            const uint32_t* n_row   = box_n[rows - h0];
-            const uint32_t* inv_row = box_inv[rows - h0];
-            const uint32_t* acc     = acc_.data();
-            uint32_t* dst_row = dst + (size_t)(dst_y + oy) * dst_w + dst_x;
-            for (uint32_t ox = 0; ox < out_w; ++ox, acc += 4) {
-                const uint32_t c   = col_x0_[ox + 1u] - col_x0_[ox] - w0;
-                const uint32_t n   = n_row[c];
-                const uint32_t inv = inv_row[c];
-                dst_row[ox] = BoxMean(acc[0], n, inv) |
-                              (BoxMean(acc[1], n, inv) << 8) |
-                              (BoxMean(acc[2], n, inv) << 16) |
-                              (BoxMean(acc[3], n, inv) << 24);
-            }
-            y0 += rows;
-        }
-    }
-
-    static uint32_t BoxMean(uint32_t sum, uint32_t n, uint32_t inv) {
-        const uint32_t x = sum + n / 2u;
-        uint32_t q = (uint32_t)((uint64_t{x} * inv) >> 32);
-        if ((q + 1u) * n <= x) ++q;
-        return q;
     }
 
     std::mutex            layers_mtx_;
     std::vector<uint32_t> scratch_;
     uint32_t scratch_w_ = 0;
     uint32_t scratch_h_ = 0;
-    std::vector<uint32_t> col_x0_;
-    std::vector<uint32_t> acc_;
+    std::vector<uint32_t> src_col_;
+    std::vector<uint32_t> src_row_;
+    uint32_t map_src_w_ = 0;
+    uint32_t map_src_h_ = 0;
+    uint32_t map_dst_w_ = 0;
+    uint32_t map_dst_h_ = 0;
 };
 
 }
