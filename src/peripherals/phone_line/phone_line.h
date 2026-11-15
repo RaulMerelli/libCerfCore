@@ -1,6 +1,6 @@
 #pragma once
 
-#include <cerfcore/host/host_widget.h>
+#include <cerfcore/host/machine_phone_line.h>
 #include "line_tone.h"
 #include "phone_line_answer_modem.h"
 
@@ -17,15 +17,16 @@ class CerfEmulator;
 class StateReader;
 class StateWriter;
 
-class PhoneLine : public HostWidget {
+class PhoneLine : public MachinePhoneLine {
 public:
     static constexpr int64_t kNoChange = INT64_MAX;
 
     PhoneLine(CerfEmulator& emu, std::string label);
 
-    void RegisterWidget();
+    void AddToTree();
 
-    bool Plugged() const { return plugged_.load(std::memory_order_acquire); }
+    bool Plugged() const override { return plugged_.load(std::memory_order_acquire); }
+    void SetPlugged(bool plugged) override;
 
     void Advance(int64_t now_ns);
     void SetOffHook(bool off_hook);
@@ -51,21 +52,14 @@ public:
     void SaveLineState(StateWriter& w, int64_t now_ns) const;
     void RestoreLineState(StateReader& r, int64_t now_ns);
 
-    std::string WidgetName() const override { return label_; }
-    WidgetGroup Group() const override { return WidgetGroup::Network; }
-    std::string Tooltip() const override;
-    bool TryPrimaryAction() override;
-    bool ControlsAreOneAction() const override { return true; }
-    std::vector<WidgetControl> Controls() override;
-    WidgetIcon Icon() const override;
-    bool PollDirty() override;
-    void SaveWidgetState(StateWriter& w) const override;
-    void RestoreWidgetState(StateReader& r) override;
+    std::string ObjectId() const override { return "phone_line"; }
+    std::string ObjectName() const override { return label_; }
+    void        SaveObjectState(StateWriter& w) const override;
+    void        RestoreObjectState(StateReader& r) override;
 
 private:
     enum class Phase : uint8_t { kSilent, kDialTone, kCollecting, kRingback, kAnswered };
 
-    void    Toggle();
     void    Sync();
     void    StartCall();
     bool    Connected() const { return off_hook_ && line_plugged_; }
@@ -79,7 +73,6 @@ private:
     CerfEmulator&        emu_;
     std::string          label_;
     std::atomic<bool>    plugged_{true};
-    bool                 drawn_plugged_ = true;
     bool                 line_plugged_  = true;
     bool                 off_hook_      = false;
     uint32_t             digits_        = 0;

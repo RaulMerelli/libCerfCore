@@ -23,8 +23,9 @@ public:
     void OnPenUp  (const HostPointerInputLock::Hold& hold, int x, int y);
     void ReleaseHeld(const HostPointerInputLock::Hold& hold);
 
-    std::string    SourceName()       const override { return "Stock stylus"; }
-    const char*    IconResourceName() const override { return "stylus"; }
+    static constexpr char kSourceName[] = "Stock stylus";
+    std::string    SourceId()         const override { return "stylus"; }
+    std::string    SourceName()       const override { return kSourceName; }
     int            SourcePriority()   const override { return 0; }
     PointerKind    Kind()             const override { return PointerKind::Stylus; }
 
@@ -37,6 +38,7 @@ protected:
 private:
     HostPointerInputLock& Lock() const;
     void Down(int x, int y);
+    void Move(int x, int y);
     void Up(int x, int y);
     void Lost();
 

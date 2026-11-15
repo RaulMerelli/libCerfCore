@@ -6,7 +6,7 @@
 #include <cerfcore/core/fatal.h>
 #include <cerfcore/core/instance_threads.h>
 #include <cerfcore/cpu/emulated_memory.h>
-#include "../../host/audio_activity_widget.h"
+#include "../../host/audio_activity.h"
 #include "sa11xx_dma.h"
 
 #include <cstring>
@@ -15,9 +15,9 @@ namespace cerfcore {
 
 void Sa11xxDmaAudioPlayer::OnReady() {
     cfg_ = AudioConfig();
-    out_.Start(emu_.Get<Fatal>(), emu_.Get<InstanceThreads>(), cfg_.log_tag, 0u, cfg_.channels, cfg_.bits_per_sample);
+    out_.Start(emu_.Get<Fatal>(), emu_.Get<InstanceThreads>(), emu_.TryGet<AudioOutputs>(), cfg_.log_tag, 0u, cfg_.channels, cfg_.bits_per_sample);
     emu_.Get<Sa11xxDma>().RegisterTransmitObserver(this);
-    emu_.Get<AudioActivityWidget>().NotePresent();
+    emu_.Get<AudioActivity>().NotePresent();
 }
 
 void Sa11xxDmaAudioPlayer::OnShutdown() { out_.Stop(); }
@@ -48,7 +48,7 @@ void Sa11xxDmaAudioPlayer::QueueBlock(GuestCycleClock::Rate word_rate) {
         active_ = true;
     }
     if (OutputMuted()) std::memset(block_.data(), 0, block_.size());
-    else               emu_.Get<AudioActivityWidget>().MarkTx();
+    else               emu_.Get<AudioActivity>().MarkTx();
     out_.QueueOutput(block_.data(), static_cast<uint32_t>(block_.size()));
 }
 

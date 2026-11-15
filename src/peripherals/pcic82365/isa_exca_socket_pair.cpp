@@ -2,7 +2,7 @@
 
 #include <cerfcore/core/cerf_emulator.h>
 #include <cerfcore/core/fatal.h>
-#include <cerfcore/host/host_widget_registry.h>
+#include <cerfcore/host/machine_object_tree.h>
 #include <cerfcore/socs/guest_cpu_reset.h>
 #include <cerfcore/state/state_stream.h>
 #include "../pcmcia/pcmcia_host_cycles.h"
@@ -21,8 +21,8 @@ constexpr uint8_t  kRegCardStatusChange = 0x04u;
 
 IsaExcaSocketPair::IsaExcaSocketPair(CerfEmulator& emu, ExcaPartRules rules)
     : Service(emu),
-      slot0_(emu, *this, std::string()),
-      slot1_(emu, *this, std::string()),
+      slot0_(emu, *this, ObjectIdentity{}),
+      slot1_(emu, *this, ObjectIdentity{}),
       exca0_(rules),
       exca1_(rules) {}
 
@@ -31,13 +31,13 @@ void IsaExcaSocketPair::OnShutdown() {
     slot1_.OnShutdown();
 }
 
-void IsaExcaSocketPair::StartSockets(std::string slot0_label, std::optional<std::string> slot1_label) {
-    auto& reg = emu_.Get<HostWidgetRegistry>();
-    slot0_.SetLabel(std::move(slot0_label));
-    reg.Register(&slot0_);
-    if (slot1_label) {
-        slot1_.SetLabel(std::move(*slot1_label));
-        reg.Register(&slot1_);
+void IsaExcaSocketPair::StartSockets(ObjectIdentity slot0, std::optional<ObjectIdentity> slot1) {
+    auto& tree = emu_.Get<MachineObjectTree>();
+    slot0_.SetIdentity(std::move(slot0));
+    tree.Add(&slot0_);
+    if (slot1) {
+        slot1_.SetIdentity(std::move(*slot1));
+        tree.Add(&slot1_);
         slot1_wired_ = true;
     }
     ResetController();

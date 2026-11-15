@@ -47,7 +47,7 @@ public:
 protected:
     static constexpr int kSockets = 2;
 
-    void StartSockets(std::string slot0_label, std::optional<std::string> slot1_label);
+    void StartSockets(ObjectIdentity slot0, std::optional<ObjectIdentity> slot1);
     void ResetController();
 
     int         BankOf(const PcmciaSlot& slot) const { return &slot == &slot1_ ? 1 : 0; }

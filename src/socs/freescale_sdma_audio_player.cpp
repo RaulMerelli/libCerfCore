@@ -5,7 +5,7 @@
 #include <cerfcore/core/instance_threads.h>
 #include <cerfcore/core/log.h>
 #include <cerfcore/cpu/emulated_memory.h>
-#include "../host/audio_activity_widget.h"
+#include "../host/audio_activity.h"
 #include <cerfcore/state/state_stream.h>
 #include "freescale_module_clocks.h"
 #include "freescale_ssi_core.h"
@@ -39,9 +39,9 @@ void FreescaleSdmaAudioPlayer::OnReady() {
     }
     emu_.Get<FreescaleModuleClocks>().RegisterGateListener([this] { OnControl(); });
     emu_.Get<GuestCpuReset>().RegisterResetListener([this](ResetLineKind) { ResetLine(); });
-    out_.Start(emu_.Get<Fatal>(), emu_.Get<InstanceThreads>(), LogTag(), 0u, 0u, 0u);
+    out_.Start(emu_.Get<Fatal>(), emu_.Get<InstanceThreads>(), emu_.TryGet<AudioOutputs>(), LogTag(), 0u, 0u, 0u);
     wiring_->Sdma().RegisterChannelSink(this);
-    emu_.Get<AudioActivityWidget>().NotePresent();
+    emu_.Get<AudioActivity>().NotePresent();
 }
 
 void FreescaleSdmaAudioPlayer::OnShutdown() { out_.Stop(); }
@@ -131,7 +131,7 @@ void FreescaleSdmaAudioPlayer::QueueSamples(uint32_t buf_pa, uint32_t bytes) {
         out_.QueueOutput(chunk, n);
         off += n;
     }
-    emu_.Get<AudioActivityWidget>().MarkTx();
+    emu_.Get<AudioActivity>().MarkTx();
 }
 
 void FreescaleSdmaAudioPlayer::SaveSinkState(StateWriter& w) {

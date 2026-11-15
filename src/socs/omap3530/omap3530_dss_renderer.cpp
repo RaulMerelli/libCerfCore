@@ -9,7 +9,7 @@
 #include <cerfcore/core/fatal.h>
 #include <cerfcore/core/log.h>
 #include <cerfcore/cpu/emulated_memory.h>
-#include <cerfcore/host/panel_frame_renderer.h>
+#include "../../host/panel_frame_renderer.h"
 #include <cerfcore/lcd/lcd_pixel_expand.h>
 
 #include <cstdint>
@@ -38,15 +38,7 @@ public:
 
     bool HasFrame() override {
         auto& dss = emu_.Get<Omap3530Dss>();
-        if (!dss.IsScanning()) return false;
-        if (latch_.Latched())  return true;
-        const uint32_t fb_pa = dss.GetFbPa();
-        const uint32_t w     = dss.GetGuestW();
-        const uint32_t h     = dss.GetGuestH();
-        if (fb_pa == 0 || w == 0 || h == 0) return false;
-        const size_t fb_bytes = (size_t)w * (size_t)h * 2u;  /* RGB16 */
-        return latch_.ProbeAndLatch(emu_.Get<EmulatedMemory>(),
-                                    fb_pa, fb_bytes);
+        return dss.IsScanning() && dss.GetFbPa() != 0 && dss.GetGuestW() != 0 && dss.GetGuestH() != 0;
     }
 
     void RenderInto(uint32_t* dib_bgra32,

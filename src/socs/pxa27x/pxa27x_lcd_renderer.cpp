@@ -9,7 +9,7 @@
 #include <cerfcore/core/fatal.h>
 #include <cerfcore/core/log.h>
 #include <cerfcore/cpu/emulated_memory.h>
-#include <cerfcore/host/panel_frame_renderer.h>
+#include "../../host/panel_frame_renderer.h"
 #include <cerfcore/lcd/lcd_pixel_expand.h>
 
 #include <cstring>
@@ -40,17 +40,7 @@ public:
         auto& lcd = emu_.Get<Pxa27xLcd>();
         if (!lcd.IsEnabled())  return false;
         RequireSupportedMode(lcd);
-        if (latch_.Latched())  return true;
-
-        const uint32_t fb_pa   = lcd.GetChannelSrcPa(0);
-        const uint32_t guest_w = lcd.GetGuestW();
-        const uint32_t guest_h = lcd.GetGuestH();
-        if (fb_pa == 0 || guest_w == 0 || guest_h == 0) return false;
-
-        const size_t fb_bytes = (size_t)guest_w * (size_t)guest_h
-                              * (size_t)kBytesPerPixel16Bpp;
-        return latch_.ProbeAndLatch(emu_.Get<EmulatedMemory>(),
-                                    fb_pa, fb_bytes);
+        return lcd.GetChannelSrcPa(0) != 0 && lcd.GetGuestW() != 0 && lcd.GetGuestH() != 0;
     }
 
     void RenderInto(uint32_t* dib_bgra32,

@@ -4,7 +4,7 @@
 
 #include "ite_it8181_config.h"
 #include <cerfcore/core/cerf_emulator.h>
-#include <cerfcore/host/panel_frame_renderer.h>
+#include "../../host/panel_frame_renderer.h"
 #include <cerfcore/lcd/lcd_pixel_expand.h>
 
 #include <algorithm>
@@ -39,12 +39,7 @@ public:
     }
 
     bool HasFrame() override {
-        const IteIt8181::Scanout s = chip_->Display();
-        if (!s.shown) return false;
-        if (latch_.Latched()) return true;
-        return latch_.ProbeAndLatch(chip_->Vram() + s.start,
-                                    static_cast<size_t>(s.height - 1u) * s.stride +
-                                        static_cast<size_t>(s.width) * s.bytes);
+        return chip_->Display().shown;
     }
 
     void RenderInto(uint32_t* dib, uint32_t host_w, uint32_t host_h) override {

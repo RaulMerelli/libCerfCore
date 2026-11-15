@@ -1,12 +1,10 @@
 #pragma once
 
 #include "../core/service.h"
-#include "../state/shutdown_choice.h"
 #include "guest_power_notifier.h"
 #include "../core/callback_list.h"
 
 #include <atomic>
-#include <condition_variable>
 #include <cstdint>
 #include <functional>
 #include <mutex>
@@ -92,23 +90,17 @@ public:
     int64_t ParkWaitNs() const;
 
     void Enter();
-    void RePrompt();
+    void Resume();
 
+    void RegisterSleepListener(std::function<void(bool asleep)> fn);
     void ObserveAsleep(bool asleep);
     bool Asleep() const { return asleep_.load(std::memory_order_acquire); }
 
-    /* Hibernation worker, after a full restore: a machine saved mid-deep-sleep
-       comes back with deep_sleep set, so auto-wake it (the dialog's Cancel
-       action) - otherwise the JIT parks forever at "State restored". */
     void OnFullRestore();
 
 private:
-    void Recover();
     void OnGuestIdle();
-    void MarkSleepEnded();
     bool ClaimSleepEnd();
-    bool TakePendingLocked(ShutdownChoice& choice);
-    void ApplyChoiceInPark(ShutdownChoice c);
     void RequireNoWakeShape(const char* shape) const;
     void ConsumeSleepSpan();
     int64_t CollectParkWakeDue() const;
@@ -118,6 +110,7 @@ private:
     CallbackList<>                     power_up_listeners_;
     CallbackList<>                     user_wake_inputs_;
     CallbackList<>                     sleep_entry_listeners_;
+    CallbackList<bool>                 sleep_listeners_;
     CallbackList<>                     park_clocks_;
     std::vector<std::function<bool()>> park_wake_sources_;
     std::vector<std::function<int64_t()>> park_wake_dues_;
@@ -132,13 +125,8 @@ private:
     bool                       power_on_wake_          = false;
     std::atomic<bool>          asleep_{false};
     std::atomic<bool>          off_{false};
-    bool                       sleep_ended_    = false;
-    bool                       choice_pending_ = false;
-    ShutdownChoice             pending_choice_ = ShutdownChoice::Cancel;
-    bool                       prompt_open_ = false;
-    bool                       asking_      = false;
+    bool                       wake_requested_ = false;
     std::mutex                 resume_mtx_;
-    std::condition_variable    resume_cv_;
 };
 
 }

@@ -1,17 +1,17 @@
 #include <cerfcore/boards/board_context.h>
 #include <cerfcore/core/cerf_emulator.h>
 #include <cerfcore/host/guest_deep_sleep.h>
-#include <cerfcore/host/host_widget.h>
-#include <cerfcore/host/host_widget_registry.h>
+#include <cerfcore/host/machine_indicators.h>
+#include <cerfcore/host/machine_object_tree.h>
 #include <cerfcore/state/hibernation.h>
 #include <cerfengine/host_request_channel.h>
-#include "../../core/steady_time.h"
 #include "../../execution/engine_bridge.h"
 #include "../../socs/guest_sample_clock.h"
 #include "../../socs/sh77xx/sh77xx_pfc.h"
 #include "../../socs/sh77xx/sh77xx_port_wiring.h"
 #include "hp_600_family_id.h"
 #include "hp_600_battery.h"
+#include "hp_600_input_nets.h"
 #include "hp_600_key_matrix.h"
 #include "hp_600_keyboard_layout.h"
 #include "hp_600_led_colors.h"
@@ -28,17 +28,14 @@ namespace {
 
 constexpr uint8_t kVkLedButton = 0x78u;
 constexpr GuestCycleClock::Rate kPressHold{10u, 1u};
-constexpr uint64_t  kFlashHalfPeriodMs = 500u;
-constexpr WidgetRgb kClrOrange{255, 150, 40};
-constexpr WidgetRgb kClrRed{235, 50, 40};
-constexpr WidgetRgb kClrGreen{120, 255, 140};
-constexpr WidgetRgb kClrDark{40, 40, 36};
-constexpr WidgetRgb kClrRim{150, 160, 150};
-constexpr WidgetRgb kClrRimBlink{120, 230, 130};
+constexpr uint32_t  kFlashHalfMs = 500u;
+constexpr ObjectRgb kClrOrange{255, 150, 40};
+constexpr ObjectRgb kClrRed{235, 50, 40};
+constexpr ObjectRgb kClrGreen{120, 255, 140};
 
 enum class Charge { kDark, kCharging, kCharged };
 
-WidgetRgb LedRgb(Hp600LedColor color) {
+ObjectRgb LedRgb(Hp600LedColor color) {
     switch (color) {
         case Hp600LedColor::kRed:   return kClrRed;
         case Hp600LedColor::kGreen: return kClrGreen;
@@ -46,15 +43,7 @@ WidgetRgb LedRgb(Hp600LedColor color) {
     }
 }
 
-const char* LedName(Hp600LedColor color) {
-    switch (color) {
-        case Hp600LedColor::kRed:   return "red";
-        case Hp600LedColor::kGreen: return "green";
-        default:                    return "orange";
-    }
-}
-
-class Hp600LedButton : public Service, public HostWidget {
+class Hp600LedButton : public Service, public MachineLamp {
 public:
     using Service::Service;
 
@@ -65,6 +54,8 @@ public:
     void OnReady() override {
         wiring_  = &emu_.Get<Sh77xxPortWiring>();
         battery_ = &emu_.Get<Hp600Battery>();
+        battery_->AddChangeListener([this] { Refresh(); });
+        emu_.Get<Hp600InputNets>().AddNetListener(Hp600InputNet::kNotificationLedLoop, [this] { Refresh(); });
         const Hp600LedColors& colors = emu_.Get<Hp600LedColors>();
         charging_     = colors.ChargingColor();
         notification_ = colors.NotificationColor();
@@ -80,64 +71,37 @@ public:
                 hold_.Stop();
             });
         }
-        emu_.Get<HostWidgetRegistry>().Register(this);
+        auto& tree = emu_.Get<MachineObjectTree>();
+        tree.Add(this);
+        if (led_cell_) tree.Add(&button_, this);
     }
 
-    std::string WidgetName() const override { return led_cell_ ? "LED button" : "LED"; }
-    WidgetGroup Group() const override { return WidgetGroup::Indicator; }
+    std::string ObjectId() const override { return "led"; }
+    static constexpr char kObjectName[] = "LED";
+    std::string ObjectName() const override { return kObjectName; }
 
-    std::string Tooltip() const override {
-        std::string text = WidgetName() + " - ";
-        switch (CurrentCharge()) {
-            case Charge::kCharging: text += LedName(charging_); break;
-            case Charge::kCharged:  text += LedName(Hp600LedColor::kGreen); break;
-            default:                text += "dark"; break;
-        }
-        if (Flashing()) text += " and flashing";
-        if (led_cell_) text += " (click = press the LED button)";
-        return text;
-    }
-
-    bool TryPrimaryAction() override {
-        if (!led_cell_) return false;
-        Press();
-        return true;
-    }
-
-    std::vector<WidgetControl> Controls() override {
-        if (!led_cell_) return {};
-        ActionControl press;
-        press.id    = "press_button";
-        press.label = "Press the LED button";
-        press.press = [this] { Press(); };
-        return {WidgetControl{std::move(press)}};
-    }
-
-    WidgetIcon Icon() const override {
-        constexpr int kR = 6;
-        const WidgetRgb fill = drawn_flash_lit_ ? LedRgb(notification_) : ChargeColor(drawn_charge_);
-        return LedIcon{fill, drawn_flashing_ ? kClrRimBlink : kClrRim, kR};
-    }
-
-    bool PollDirty() override {
-        const Charge charge    = CurrentCharge();
-        const bool   flashing  = Flashing();
-        const bool   flash_lit = flashing && HostSteadySquareWaveHigh(kFlashHalfPeriodMs);
-        if (charge == drawn_charge_ && flashing == drawn_flashing_ && flash_lit == drawn_flash_lit_) return false;
-        drawn_charge_    = charge;
-        drawn_flashing_  = flashing;
-        drawn_flash_lit_ = flash_lit;
-        return true;
+    LampState Lamp() const override {
+        const Charge    charge = CurrentCharge();
+        const ObjectRgb charge_color =
+            charge == Charge::kCharged ? LedRgb(Hp600LedColor::kGreen) : LedRgb(charging_);
+        if (!Flashing()) return LampState{charge != Charge::kDark, false, charge_color};
+        std::optional<ObjectRgb> between;
+        if (charge != Charge::kDark) between = charge_color;
+        return LampState{true, true, LedRgb(notification_), kFlashHalfMs, kFlashHalfMs, between};
     }
 
 private:
-    WidgetRgb ChargeColor(Charge charge) const {
-        switch (charge) {
-            case Charge::kCharging: return LedRgb(charging_);
-            case Charge::kCharged:  return LedRgb(Hp600LedColor::kGreen);
-            default:                return kClrDark;
-        }
-    }
+    class Button final : public MachineButton {
+    public:
+        explicit Button(Hp600LedButton& owner) : owner_(owner) {}
+        std::string ObjectId() const override { return "button"; }
+        static constexpr char kObjectName[] = "LED button";
+        std::string ObjectName() const override { return kObjectName; }
+        void        Press() override { owner_.Press(); }
+
+    private:
+        Hp600LedButton& owner_;
+    };
 
     Charge CurrentCharge() const {
         if (battery_->Charging()) return Charge::kCharging;
@@ -171,9 +135,7 @@ private:
     Hp600LedColor                    notification_ = Hp600LedColor::kOrange;
     GuestSampleClock                 hold_{emu_};
     std::atomic<bool>                press_pending_{false};
-    Charge                           drawn_charge_    = Charge::kDark;
-    bool                             drawn_flashing_  = false;
-    bool                             drawn_flash_lit_ = false;
+    Button                           button_{*this};
 };
 
 }

@@ -6,7 +6,7 @@
 #include <cerfcore/core/instance_threads.h>
 #include <cerfcore/cpu/emulated_memory.h>
 #include <cerfcore/state/state_stream.h>
-#include "../../host/audio_activity_widget.h"
+#include "../../host/audio_activity.h"
 #include "vr41xx_audio_switch.h"
 #include "vr41xx_dcu.h"
 
@@ -34,7 +34,7 @@ void Vr41xxAiuMic::AttachHost() {
     Attach();
     switch_ = &emu_.Get<Vr41xxAudioSwitch>();
     mic_on_ = switch_->MicOn();
-    mic_.Start(emu_.Get<InstanceThreads>(), "Vr41xxAiuMic", kFifoBytes);
+    mic_.Start(emu_.Get<InstanceThreads>(), emu_.TryGet<AudioInputs>(), "Vr41xxAiuMic", kFifoBytes);
 }
 
 void Vr41xxAiuMic::StopHost() { mic_.Stop(); }
@@ -61,7 +61,7 @@ uint16_t Vr41xxAiuMic::NextSample() {
     uint8_t pcm[2] = {};
     const bool heard = mic_.Take(pcm, sizeof pcm) != 0u;
     if (!mic_on_) return kDataReset;
-    if (heard) emu_.Get<AudioActivityWidget>().MarkRx();
+    if (heard) emu_.Get<AudioActivity>().MarkRx();
     const int sample = static_cast<int16_t>(cerf::le::U16(pcm, 0));
     return static_cast<uint16_t>((sample + 0x8000) >> 6);
 }

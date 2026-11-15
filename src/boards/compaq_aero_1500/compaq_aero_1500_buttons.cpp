@@ -54,7 +54,8 @@ public:
         emu_.Get<KeyboardRouter>().Register(this);
     }
 
-    std::string SourceName() const override { return "Aero buttons"; }
+    static constexpr char kSourceName[] = "Aero buttons";
+    std::string SourceName() const override { return kSourceName; }
 
     void OnHostKey(uint8_t vk, bool key_up) override {
         uint32_t code = 0;

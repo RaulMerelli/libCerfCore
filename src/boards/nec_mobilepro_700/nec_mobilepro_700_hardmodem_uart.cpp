@@ -13,6 +13,9 @@ namespace cerfcore {
 
 namespace {
 
+constexpr char kModemPortId[]    = "modem_port";
+constexpr char kModemPortLabel[] = "COM4 (internal modem)";
+
 constexpr uint32_t kModemChipSelect = 2u;
 
 class Vr4102HardModemUart : public Vrc4172ChipSelected<Uart16550> {
@@ -30,7 +33,7 @@ public:
     void OnChipSelectReady() override {
         Uart16550::OnReady();
 
-        Port().AttachCradle(emu_, "COM4 (internal modem)");
+        Port().AttachCradle(emu_, {kModemPortId, kModemPortLabel});
         LOG(Periph, "[UART] HardModem attached as serial endpoint line 'COM4'\n");
     }
 

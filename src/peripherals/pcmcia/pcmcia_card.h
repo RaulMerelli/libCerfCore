@@ -1,6 +1,6 @@
 #pragma once
 
-#include <cerfcore/host/host_widget.h>
+#include <cerfcore/host/machine_socket.h>
 
 #include <cstdint>
 #include <string>
@@ -46,10 +46,7 @@ public:
        path, serial COM name). Empty for cards rebuildable from id alone. */
     virtual std::string SaveBinding() const { return {}; }
 
-    /* Status-bar tooltip detail (e.g. name + MAC). */
-    virtual std::string TooltipDetail() const { return DisplayName(); }
-
-    virtual const char* IconResource() const { return "pcmcia_enabled"; }
+    virtual CardFacts Facts() const { return NoCardFacts{}; }
 
     /* Socket Vcc edges, driven by the slot when the controller's power
        register flips. */
@@ -88,14 +85,10 @@ public:
        calls through freed memory. */
     virtual void OnShutdown() {}
 
+    virtual void StopHostIo() {}
+
     virtual void OnSlotTimer() {}
 
-    virtual std::vector<WidgetControl> CardControls() { return {}; }
-
-    /* Wired by the slot before OnInserted. The id names THIS residency:
-       a card is destroyed on eject and the slot may hold a different card by the time
-       a deferred UI job runs, so a card keys deferred work by id and the slot acts on
-       it only while that residency still holds. */
     void AttachSlot(PcmciaSlot* slot, uint64_t card_id) {
         slot_    = slot;
         card_id_ = card_id;

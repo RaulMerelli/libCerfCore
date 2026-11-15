@@ -10,6 +10,9 @@ namespace cerfcore {
 
 namespace {
 
+constexpr char kSerialPortId[]    = "serial_port";
+constexpr char kSerialPortLabel[] = "COM1 (serial)";
+
 /* UART A ($0B0) is the built-in serial port (serial.dll HWInit sub_1EB2028). UART B
    ($0C8) is the debug module's port, reached only when the OAL debug flag is set, and
    is not an attach target. */
@@ -30,7 +33,7 @@ public:
     std::optional<Pr31x00SerialModem> ForUart(uint32_t mmio_base) const override {
         if (mmio_base != kUartA) return std::nullopt;
         Pr31x00SerialModem m;
-        m.label = "COM1 (serial)";
+        m.port  = {kSerialPortId, kSerialPortLabel};
         m.cts   = Pr31x00SerialPin::OnMfio(30);
         m.rts   = Pr31x00SerialPin::OnMfio(31);
         m.dcd   = Pr31x00SerialPin::OnIo(4);

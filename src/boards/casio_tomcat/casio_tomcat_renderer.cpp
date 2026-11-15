@@ -3,7 +3,7 @@
 #include "casio_tomcat_lcd.h"
 
 #include <cerfcore/core/cerf_emulator.h>
-#include <cerfcore/host/panel_frame_renderer.h>
+#include "../../host/panel_frame_renderer.h"
 #include "../../lcd/panel_scanout.h"
 #include <cerfcore/boards/board_context.h>
 #include "casio_tomcat_family_id.h"
@@ -30,9 +30,7 @@ public:
     bool HasFrame() override {
         auto& lcd = emu_.Get<CasioTomcatLcd>();
         lcd.MaybePublishDisplaySize();
-        if (!lcd.IsDisplayEnabled()) return false;
-        if (latch_.Latched())         return true;
-        return latch_.ProbeAndLatch(lcd.FbBytes(), lcd.FbSize());
+        return lcd.IsDisplayEnabled();
     }
 
     void RenderInto(uint32_t* dib, uint32_t host_w, uint32_t host_h) override {

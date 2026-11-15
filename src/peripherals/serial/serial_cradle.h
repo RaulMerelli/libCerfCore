@@ -1,10 +1,11 @@
 #pragma once
 
-#include <cerfcore/host/host_widget.h>
+#include <cerfcore/host/machine_socket.h>
 
 #include <cstdint>
 #include <memory>
 #include <mutex>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -16,9 +17,9 @@ class SerialEndpoint;
 class StateWriter;
 class StateReader;
 
-class SerialCradle : public HostWidget {
+class SerialCradle : public MachineSocket {
 public:
-    SerialCradle(CerfEmulator& emu, SerialLine& line, std::string label);
+    SerialCradle(CerfEmulator& emu, SerialLine& line, ObjectIdentity identity);
     ~SerialCradle();
 
     void OnShutdown();
@@ -26,37 +27,40 @@ public:
     void SaveCradleState(StateWriter& w);
     void RestoreCradleState(StateReader& r);
 
-    std::string WidgetName() const override { return label_; }
-    WidgetGroup Group() const override { return WidgetGroup::Network; }
-    std::string Tooltip() const override;
-    std::vector<WidgetControl> Controls() override;
-    WidgetIcon  Icon() const override;
-    bool PollDirty() override;
+    std::string       ObjectId() const override { return identity_.id; }
+    std::string       ObjectName() const override { return identity_.name; }
+    MachineObjectKind ObjectKind() const override { return MachineObjectKind::kSerialPort; }
+
+    std::optional<InsertedItem>  Inserted() const override;
+    std::vector<InsertableType> Accepted() const override;
+    void Eject() override;
+
+protected:
+    void InsertAccepted(const std::string& type_id, const std::string& command_id,
+                        const std::string& argument) override;
 
 private:
-    enum class Kind { None, Modem, Forward };
+    enum class Plugged { None, Modem, Forward };
 
     static constexpr const char* kModemId   = "modem";
     static constexpr const char* kForwardId = "forward";
 
-    void SwapModem(uint64_t gen);
-    void SwapForward(uint64_t gen, std::string host_port);
-    void Eject(uint64_t gen);
-    void SetPluggedLocked(Kind kind, std::string host_port, bool power_up);
-    std::vector<SlotEntry> AvailableLocked(uint64_t gen);
-    const char* IconResourceLocked() const;
+    void Replug(Plugged plugged, std::string host_port);
+    void UnplugAt(uint64_t gen);
+    void ReportFailure(uint64_t gen, const char* reason, uint32_t code);
+    void SetPluggedLocked(Plugged plugged, std::string host_port, bool power_up);
+    void Announce(Plugged before, Plugged after);
 
     CerfEmulator& emu_;
-    SerialLine&   line_;
-    std::string   label_;
+    SerialLine&    line_;
+    ObjectIdentity identity_;
 
-    mutable std::mutex mtx_;
-    Kind                            kind_ = Kind::None;
+    mutable std::mutex              mtx_;
+    Plugged                         plugged_ = Plugged::None;
     std::string                     host_port_;
     std::unique_ptr<SerialEndpoint> endpoint_;
     uint64_t                        generation_ = 0;
-
-    std::string ui_last_res_;
+    bool                            shut_down_  = false;
 };
 
 }

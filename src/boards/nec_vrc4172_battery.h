@@ -1,7 +1,7 @@
 #pragma once
 
 #include <cerfcore/core/service.h>
-#include "../host/battery_widget.h"
+#include <cerfcore/host/battery.h>
 
 #include <cstddef>
 #include <cstdint>
@@ -19,8 +19,8 @@ public:
 
     void OnReady() override;
 
-    int  FillPercent() const { return battery_.FillPercent(); }
-    bool IsOnBattery() const { return battery_.IsOnBattery(); }
+    int  FillPercent() const { return battery_.ChargePercent(); }
+    bool IsOnBattery() const { return battery_.OnBattery(); }
 
     template <size_t N>
     uint16_t AdcWord(const NecBatteryAdcStep (&table)[N]) const {
@@ -34,7 +34,7 @@ public:
 private:
     void DriveAcPin();
 
-    BatteryWidget battery_;
+    Battery       battery_{emu_};
 };
 
 }

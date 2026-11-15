@@ -1,7 +1,7 @@
 #pragma once
 
 #include <cerfcore/core/service.h>
-#include <cerfcore/host/host_widget.h>
+#include <cerfcore/host/machine_indicators.h>
 
 #include <cstdint>
 #include <mutex>
@@ -12,7 +12,7 @@ class CompaqIpaqH3000Battery;
 class StateReader;
 class StateWriter;
 
-class CompaqIpaqH3000MicroLed : public Service, public HostWidget {
+class CompaqIpaqH3000MicroLed : public Service, public MachineLamp {
 public:
     using Service::Service;
 
@@ -25,15 +25,12 @@ public:
     void SaveState(StateWriter& w);
     void RestoreState(StateReader& r);
 
-    std::string WidgetName() const override { return "Alarm/charge LED"; }
-    WidgetGroup Group() const override { return WidgetGroup::Indicator; }
-    std::string Tooltip() const override;
-    WidgetIcon  Icon() const override;
-    bool        PollDirty() override;
+    std::string ObjectId() const override { return "alarm_charge_led"; }
+    static constexpr char kObjectName[] = "Alarm/charge LED";
+    std::string ObjectName() const override { return kObjectName; }
+    LampState   Lamp() const override;
 
 private:
-    enum class Glow : uint8_t { kDark, kGreen, kYellow };
-
     struct Setting {
         uint8_t color    = 0;
         uint8_t flags    = 0;
@@ -42,14 +39,10 @@ private:
     };
 
     Setting Current() const;
-    Glow    GlowNow() const;
 
     mutable std::mutex      mtx_;
     Setting                 led_{};
     CompaqIpaqH3000Battery* battery_ = nullptr;
-
-    Glow last_drawn_ = Glow::kDark;
-    bool drawn_once_ = false;
 };
 
 }

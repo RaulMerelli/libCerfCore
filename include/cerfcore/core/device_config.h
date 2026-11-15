@@ -4,7 +4,10 @@
 #include "sd_card_cid.h"
 #include "shader_preset_entry.h"
 #include <cstdint>
+#include <functional>
 #include <map>
+#include <memory>
+#include <mutex>
 #include <string>
 #include <string_view>
 #include <utility>
@@ -32,12 +35,9 @@ struct DeviceMeta {
     int         os_ver_minor = 0;
 };
 
-/* One entry of cerf.json "additional_packages.compact_flash_cards": a CF
-   image file shipped inside the device directory plus its insert-menu
-   display name. */
 struct BundledCompactFlashCard {
-    std::string file;   /* image filename, relative to the device directory */
-    std::string name;   /* display name; menu shows "Insert bundled CF: <name>" */
+    std::string file;
+    std::string name;
     bool insert_on_launch = false;
 };
 
@@ -68,6 +68,31 @@ constexpr bool kDefaultAllowUntrustedApps = false;
 
 std::string DefaultStorageFileName(std::string_view storage_id);
 
+struct LiveDeviceSettings {
+    uint32_t board_configurable_screen_width    = kDefaultConfigurableScreenWidth;
+    uint32_t board_configurable_screen_height   = kDefaultConfigurableScreenHeight;
+    uint32_t screen_dpi                         = 0;
+    uint32_t board_configurable_screen_bpp      = 0;
+    bool     board_configurable_screen_explicit = false;
+
+    std::string           guest_additions_color_scheme;
+    int32_t               guest_additions_font_size            = 0;
+    bool                  guest_additions_font_size_set        = false;
+    bool                  guest_additions_cleartype            = false;
+    bool                  guest_additions_cleartype_set        = false;
+    bool                  guest_additions_allow_untrusted_apps = kDefaultAllowUntrustedApps;
+    std::vector<uint32_t> guest_additions_palette;
+
+    std::string share_folder;
+    std::string share_folder_mount_point;
+
+    std::string hud;
+
+    std::vector<ShaderPresetEntry>             shader_presets;
+    std::vector<std::pair<std::string, float>> shader_parameters;
+    bool                                       shader_screenshots = kDefaultShaderScreenshots;
+};
+
 struct DeviceConfig : public Service {
     using Service::Service;
 
@@ -83,23 +108,7 @@ struct DeviceConfig : public Service {
 
     DeviceMeta meta;
 
-    uint32_t board_configurable_screen_width  = kDefaultConfigurableScreenWidth;
-    uint32_t board_configurable_screen_height = kDefaultConfigurableScreenHeight;
-
-    /* Guest-additions display DPI override (logical pixels/inch) from
-       --screen-dpi / cerf.json board.configurable_screen_dpi. 0 = no override:
-       the guest driver then falls back to the ROM's registry DPI, then 96. */
-    uint32_t screen_dpi = 0;
-
-    uint32_t board_configurable_screen_bpp = 0;
-
     uint32_t screen_refresh_rate = 0;
-
-    /* True when the configurable screen size came from cerf.json
-       board.configurable_screen_* or --screen-width/height (not the bare
-       default above). The host window uses this to let an explicit size win
-       over a board's fixed-LCD preferred window size. */
-    bool board_configurable_screen_explicit = false;
 
     bool        network_enabled = kDefaultNetworkEnabled;
     std::string network_mac     = "02:CE:5F:00:00:01";
@@ -136,18 +145,7 @@ struct DeviceConfig : public Service {
 
     bool boot_in_recovery = false;
     bool guest_additions = kDefaultGuestAdditions;
-    std::string guest_additions_color_scheme;
     std::vector<std::string> guest_additions_autorun;
-
-    int32_t guest_additions_font_size = 0;
-    bool    guest_additions_font_size_set = false;
-
-    bool guest_additions_cleartype     = false;
-    bool guest_additions_cleartype_set = false;
-
-    bool guest_additions_allow_untrusted_apps = kDefaultAllowUntrustedApps;
-
-    std::vector<uint32_t> guest_additions_palette;
 
     /* Startup tab. Dev builds default to the hardware console so debug output
        shows instantly; production defaults to the boot screen. --tab overrides. */
@@ -167,26 +165,28 @@ struct DeviceConfig : public Service {
         StateBootMode::Resume;
 #endif
 
-    std::string share_folder;
-    std::string share_folder_mount_point;
-
     bool start_fullscreen = kDefaultStartFullscreen;
 
     bool double_tap_helper = kDefaultDoubleTapHelper;
 
     bool automatic_calibration = kDefaultAutomaticCalibration;
 
-    std::string hud;
-
-    std::vector<ShaderPresetEntry>             shader_presets;
-    std::vector<std::pair<std::string, float>> shader_parameters;
-    bool                                       shader_screenshots = kDefaultShaderScreenshots;
-
     bool no_focus = false;
 
     bool calibration_auto_answer = false;
 
     bool adopt_guest_additions_resolution_for_host_screen = false;
+
+    std::shared_ptr<const LiveDeviceSettings> Live() const;
+    uint64_t LiveGeneration() const;
+    void PublishLive(LiveDeviceSettings settings);
+    bool PublishLiveAt(uint64_t generation, LiveDeviceSettings settings);
+    void EditLive(const std::function<void(LiveDeviceSettings&)>& edit);
+
+private:
+    mutable std::mutex                        live_mtx_;
+    std::shared_ptr<const LiveDeviceSettings> live_ = std::make_shared<const LiveDeviceSettings>();
+    uint64_t                                  live_generation_ = 0;
 };
 
 }

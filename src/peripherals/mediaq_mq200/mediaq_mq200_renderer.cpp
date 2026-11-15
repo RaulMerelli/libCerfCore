@@ -23,14 +23,13 @@ public:
     bool HasFrame() override {
         MediaQMq200& mq = *chip_;
         if (!mq.IsEnabled()) return false;
-        if (latch_.Latched()) return true;
         const MediaQMq200Gc::Window win = mq.PanelImage();
         const int64_t row   = (static_cast<int64_t>(win.w) * MediaQMq200Gc::DepthBits(win.depth) + 7) / 8;
         const int64_t span  = static_cast<int64_t>(win.h - 1u) * win.stride;
         const int64_t first = static_cast<int64_t>(win.start) + std::min<int64_t>(span, 0);
         const int64_t last  = static_cast<int64_t>(win.start) + std::max<int64_t>(span, 0) + row;
         if (first < 0 || last > static_cast<int64_t>(mq.FbSize())) return false;
-        return latch_.ProbeAndLatch(mq.FbBytes() + first, static_cast<size_t>(last - first));
+        return true;
     }
 
     void RenderInto(uint32_t* dib, uint32_t host_w, uint32_t host_h) override {

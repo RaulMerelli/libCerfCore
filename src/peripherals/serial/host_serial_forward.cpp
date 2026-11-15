@@ -3,8 +3,6 @@
 #include <cerfcore/core/cerf_emulator.h>
 #include <cerfcore/core/instance_threads.h>
 #include <cerfcore/core/log.h>
-#include <cerfcore/core/product_name.h>
-#include <cerfcore/host/user_alert.h>
 #include "../../platform/host_clock.h"
 #include <cerfcore/state/emulation_freeze.h>
 
@@ -45,15 +43,9 @@ HostSerialForward::HostSerialForward(std::string host_port, CerfEmulator& emu)
 
 HostSerialForward::~HostSerialForward() { OnClose(); }
 
-void HostSerialForward::ReportDead(const std::string& detail) {
+void HostSerialForward::ReportDead(const char* reason, uint32_t code) {
     if (dead_.exchange(true)) return;
-    emu_.Get<UserAlert>().Post(
-        AlertLevel::kWarning, "Serial port forwarder - " CERF_PRODUCT_NAME,
-        "The serial port forwarder lost host " + port_name_ + ".\n\n" + detail +
-            "\n\nThe port has been ejected. Check that the port exists "
-            "and is not in use by another application, then insert it "
-            "again.",
-        on_dead_);
+    on_dead_(reason, code);
 }
 
 bool HostSerialForward::WithGuestAccess(const std::function<void()>& touch) {
@@ -74,7 +66,7 @@ void HostSerialForward::OnOpen() {
     if (!port_.Open(port_name_, err)) {
         LOG(Caution, "[SerialFwd] cannot open host %s (err %u)\n", port_name_.c_str(), err);
         if (uart_) uart_->SetModemInputs(false, false, false, false);
-        ReportDead("The port could not be opened (error " + std::to_string(err) + ").");
+        ReportDead("open_failed", err);
         return;
     }
 
@@ -96,13 +88,13 @@ void HostSerialForward::OnOpen() {
 }
 
 void HostSerialForward::OnClose() {
-    if (uart_) uart_->SetLineConfigCallback(nullptr);
-    StopThreads();
+    StopHostIo();
     if (uart_) uart_->SetModemInputs(false, false, false, false);
     port_.Close();
 }
 
-void HostSerialForward::StopThreads() {
+void HostSerialForward::StopHostIo() {
+    if (uart_) uart_->SetLineConfigCallback(nullptr);
     running_.store(false);
     port_.RequestStop();
     tx_cv_.notify_all();
@@ -197,7 +189,7 @@ void HostSerialForward::ReaderLoop() {
         if (result == host_platform::SerialIoResult::kFailed) {
             LOG(Caution, "[SerialFwd] %s reader err=%u; host->guest "
                 "bridge is dead\n", port_name_.c_str(), err);
-            ReportDead("Reading from the port failed (error " + std::to_string(err) + ").");
+            ReportDead("read_failed", err);
             break;
         }
         if (result == host_platform::SerialIoResult::kStopped) break;
@@ -253,14 +245,14 @@ void HostSerialForward::WriterLoop() {
                 LOG(Caution, "[SerialFwd] %s writer err=%u at byte "
                     "%zu/%zu; guest->host bytes dropped\n", port_name_.c_str(),
                     err, i, local.size());
-                ReportDead("Writing to the port failed (error " + std::to_string(err) + ").");
+                ReportDead("write_failed", err);
                 break;
             }
             if (wrote == 0) {
                 LOG(Caution, "[SerialFwd] %s writer timed out at byte %zu/%zu; "
                     "guest->host bytes dropped\n", port_name_.c_str(), i,
                     local.size());
-                ReportDead("The port stopped accepting data (write timed out).");
+                ReportDead("write_timeout", 0);
                 break;
             }
             next += byte_ticks;

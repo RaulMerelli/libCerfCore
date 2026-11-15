@@ -25,9 +25,9 @@ public:
        as hang-up; a personality that does not care leaves this default. */
     virtual void OnControlLines(bool dtr, bool rts) { (void)dtr; (void)rts; }
 
-    /* Card power / socket-reset lifecycle. OnClose deasserts the line's modem inputs. */
     virtual void OnOpen()  {}
     virtual void OnClose() {}
+    virtual void StopHostIo() {}
 
     /* The line cleared its modem-status register on a reset; re-assert the inputs. */
     virtual void ResendModemInputs() {}

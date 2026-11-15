@@ -11,7 +11,7 @@
 
 namespace cerfcore {
 
-class CalibrationHost;
+class CalibrationFrameSource;
 class CalibrationPressCursor;
 class EmulationFreeze;
 class StateReader;
@@ -55,7 +55,7 @@ private:
     TouchInput*             touch_  = nullptr;
     EmulationFreeze*        freeze_ = nullptr;
     HostPointerInputLock*   lock_   = nullptr;
-    CalibrationHost*        host_   = nullptr;
+    CalibrationFrameSource* frames_ = nullptr;
     CalibrationPressCursor* cursor_ = nullptr;
 
     mutable std::mutex      mutex_;

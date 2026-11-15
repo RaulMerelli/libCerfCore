@@ -5,7 +5,7 @@
 #include <cerfcore/core/cerf_emulator.h>
 #include <cerfcore/core/instance_threads.h>
 #include <cerfcore/state/hibernation.h>
-#include "../../host/audio_activity_widget.h"
+#include "../../host/audio_activity.h"
 #include "hp_600_family_id.h"
 
 namespace cerfcore {
@@ -27,9 +27,9 @@ bool Hp600Microphone::ShouldRegister() {
 }
 
 void Hp600Microphone::OnReady() {
-    activity_ = &emu_.Get<AudioActivityWidget>();
+    activity_ = &emu_.Get<AudioActivity>();
     activity_->NotePresent();
-    mic_.Start(emu_.Get<InstanceThreads>(), "Hp600Microphone", kMicFifoBytes);
+    mic_.Start(emu_.Get<InstanceThreads>(), emu_.TryGet<AudioInputs>(), "Hp600Microphone", kMicFifoBytes);
     emu_.Get<Hibernation>().RegisterPostRestoreListener([this] { mic_.Clear(); });
 }
 

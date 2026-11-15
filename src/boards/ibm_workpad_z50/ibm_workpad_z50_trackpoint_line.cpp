@@ -29,7 +29,8 @@ public:
         return emu_.Get<BoardContext>().GetBoardFamilyId() == BoardFamilyId::IbmWorkpadZ50;
     }
 
-    std::string SourceName() const override { return "TrackPoint"; }
+    static constexpr char kSourceName[] = "TrackPoint";
+    std::string SourceName() const override { return kSourceName; }
 
 private:
     void OnMouseReady() override {

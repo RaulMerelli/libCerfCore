@@ -1,13 +1,13 @@
 #pragma once
 
 #include <cerfcore/core/service.h>
-#include "../../platform/wave_in_fifo.h"
+#include "../../host/wave_in_fifo.h"
 
 #include <cstdint>
 
 namespace cerfcore {
 
-class AudioActivityWidget;
+class AudioActivity;
 class EmulatedMemory;
 
 class CasioJx670Capture : public Service {
@@ -29,7 +29,7 @@ public:
 private:
     WaveInFifo           mic_;
     EmulatedMemory*      mem_      = nullptr;
-    AudioActivityWidget* activity_ = nullptr;
+    AudioActivity* activity_ = nullptr;
 };
 
 }

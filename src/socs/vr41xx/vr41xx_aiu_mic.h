@@ -1,6 +1,6 @@
 #pragma once
 
-#include "../../platform/wave_in_fifo.h"
+#include "../../host/wave_in_fifo.h"
 #include "vr41xx_aiu_path.h"
 
 #include <cstdint>

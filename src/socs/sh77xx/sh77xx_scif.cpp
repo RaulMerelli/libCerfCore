@@ -13,6 +13,8 @@
 #include "sh77xx_standby_entry.h"
 
 #include <algorithm>
+#include <optional>
+#include <utility>
 
 namespace cerfcore {
 
@@ -103,13 +105,13 @@ void Sh77xxScif::OnReady() {
     emu_.Get<PeripheralDispatcher>().Register(this);
 
     if (wiring_ == nullptr) return;
-    const std::string label = wiring_->CradleLabel(Channel().base);
-    if (label.empty()) return;
+    std::optional<ObjectIdentity> cradle = wiring_->Cradle(Channel().base);
+    if (!cradle) return;
     wiring_->SetControlListener(Channel().base, [this] {
         RefreshConnection();
         port_.NotifyControlLines();
     });
-    port_.AttachCradle(emu_, label);
+    port_.AttachCradle(emu_, std::move(*cradle));
 }
 
 void Sh77xxScif::OnShutdown() { port_.OnShutdown(); }

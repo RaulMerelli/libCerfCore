@@ -6,7 +6,7 @@
 #include <cerfcore/core/fatal.h>
 #include <cerfcore/core/instance_threads.h>
 #include <cerfcore/core/log.h>
-#include "../../host/audio_activity_widget.h"
+#include "../../host/audio_activity.h"
 #include "../../host/paced_wave_out.h"
 #include "../../execution/guest_cycle_clock.h"
 #include "../../peripherals/peripheral_dispatcher.h"
@@ -73,8 +73,8 @@ public:
             [this](ResetLineKind) { Reset(); });
         emu_.Get<PeripheralDispatcher>().Register(this);
         emu_.Get<S3C2410Dma>().RegisterRequester(S3C2410DmaSource::kI2sSdo, this);
-        audio_out_.Start(emu_.Get<Fatal>(), emu_.Get<InstanceThreads>(), "S3C2410Iis", 0, 0, 0);
-        emu_.Get<AudioActivityWidget>().NotePresent();
+        audio_out_.Start(emu_.Get<Fatal>(), emu_.Get<InstanceThreads>(), emu_.TryGet<AudioOutputs>(), "S3C2410Iis", 0, 0, 0);
+        emu_.Get<AudioActivity>().NotePresent();
     }
 
     void OnShutdown() override { audio_out_.Stop(); }
@@ -471,7 +471,7 @@ void S3C2410Iis::StopTransmitLocked(HostOut& out) {
 void S3C2410Iis::Deliver(const HostOut& out) {
     for (uint32_t i = 0; i < out.blocks.count; ++i) {
         audio_out_.QueueOutput(out.blocks.block[i], kBlockBytes);
-        emu_.Get<AudioActivityWidget>().MarkTx();
+        emu_.Get<AudioActivity>().MarkTx();
     }
     if (out.new_rate != 0u) audio_out_.SetFormat(out.new_rate, 2, 16);
     if (out.finished) audio_out_.FinishAudioOut();

@@ -8,8 +8,8 @@
 #include <cerfcore/boards/board_context.h>
 #include "imx31_id.h"
 #include "../../boards/board_ata_service.h"
-#include <cerfcore/host/host_widget.h>
-#include <cerfcore/host/host_widget_registry.h>
+#include <cerfcore/host/machine_object_tree.h>
+#include <cerfcore/host/machine_storage.h>
 #include "../../peripherals/peripheral_dispatcher.h"
 #include <cerfcore/state/state_stream.h>
 #include "../../storage/ata_drive.h"
@@ -65,7 +65,7 @@ constexpr uint8_t kIpbusMask     = 0x78u;  /* bits 3-6 aggregate to ipbus_int */
 /* MCIMX31RM §2.2 Table 2-3: AVIC source 15 = ATA controller. */
 constexpr uint32_t kAvicSourceAta = 15u;
 
-class Imx31Ata : public Peripheral, public HostWidget {
+class Imx31Ata : public Peripheral, public MachineStorage {
 public:
     using Peripheral::Peripheral;
 
@@ -76,16 +76,16 @@ public:
     void OnReady() override {
         auto& bas = emu_.Get<BoardAtaService>();
         bas.EnsureExists();
-        const std::string path = bas.GetImagePath();
-        if (!disk_.Open(path, bas.GetCapacityBytes())) {
+        image_path_ = bas.GetImagePath();
+        if (!disk_.Open(image_path_, bas.GetCapacityBytes())) {
             emu_.Get<Fatal>().Die("[ATA] FATAL: cannot open core disk '%s' - held by "
-                                  "another cerf instance, or no write access.", path.c_str());
+                                  "another cerf instance, or no write access.", image_path_.c_str());
         }
         module_clocks_ = &emu_.Get<FreescaleModuleClocks>();
         module_clocks_->RegisterGateListener([this] { RefreshClock(); });
         RefreshClock();
         emu_.Get<PeripheralDispatcher>().Register(this);
-        emu_.Get<HostWidgetRegistry>().Register(this);
+        emu_.Get<MachineObjectTree>().Add(this);
         /* Drive RESET- rides the system reset line. The Zune pmc_atapi
            probe reads ERROR expecting the power-on signature 0x01 and
            never issues SRST - a warm error_=0x00 after a guest reboot
@@ -123,15 +123,11 @@ public:
         UpdateAvic();
     }
 
-    /* HostWidget. RX = sector data read from the drive (kDriveData read),
-       TX = sector data written to the drive (kDriveData write). */
-    std::string WidgetName() const override { return "Hard Disk"; }
-    WidgetGroup Group() const override { return WidgetGroup::Storage; }
-    std::string Tooltip() const override { return "IDE/ATA Hard Disk"; }
-    std::vector<WidgetControl> Controls() override {
-        return {WidgetControl{InfoControl{"IDE/ATA Hard Disk"}}};
-    }
-    WidgetIcon Icon() const override { return HardDiskIcon{}; }
+    std::string   ObjectId() const override { return "hard_disk"; }
+    static constexpr char kObjectName[] = "IDE/ATA Hard Disk";
+    std::string   ObjectName() const override { return kObjectName; }
+    StorageMedium Medium() const override { return StorageMedium::kHardDisk; }
+    std::string   ImagePath() const override { return image_path_; }
 
     uint8_t ReadByte(uint32_t addr) override {
         const uint32_t off = addr - kBase;
@@ -270,7 +266,8 @@ private:
         else       avic.DeassertSource(kAvicSourceAta);
     }
 
-    DiskImage disk_;
+    DiskImage   disk_;
+    std::string image_path_;
     AtaDrive  drive_{&disk_};
 
     std::array<uint8_t, kTimingEnd + 1> timing_ = [] {

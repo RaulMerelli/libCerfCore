@@ -8,13 +8,16 @@
 #include <cerfcore/core/cerf_emulator.h>
 #include <cerfcore/core/fatal.h>
 #include <cerfcore/core/log.h>
-#include <cerfcore/host/host_widget_registry.h>
+#include <cerfcore/host/machine_object_tree.h>
 #include <cerfcore/socs/guest_cpu_reset.h>
 #include <cerfcore/state/state_stream.h>
 
 namespace cerfcore {
 
 namespace {
+
+constexpr char kSlotId[]    = "pc_card_slot";
+constexpr char kSlotLabel[] = "PCMCIA #1";
 
 constexpr uint32_t kPortIndex   = 0x0u;
 constexpr uint8_t  kNoIrqSelect = 0x0u;
@@ -99,7 +102,7 @@ bool NewInterruptBits(uint8_t now, uint8_t before) {
 }  /* namespace */
 
 Pd6710Controller::Pd6710Controller(CerfEmulator& emu)
-    : Service(emu), slot_(emu, *this, "PCMCIA #1"), exca_(kExcaRules) {}
+    : Service(emu), slot_(emu, *this, {kSlotId, kSlotLabel}), exca_(kExcaRules) {}
 
 bool Pd6710Controller::ShouldRegister() {
     return emu_.Get<BoardContext>().GetBoardFamilyId() == BoardFamilyId::SamsungSmdk2410;
@@ -110,7 +113,7 @@ void Pd6710Controller::OnReady() {
         std::lock_guard<std::mutex> lk(state_mutex_);
         ResetRegistersLocked();
     }
-    emu_.Get<HostWidgetRegistry>().Register(&slot_);
+    emu_.Get<MachineObjectTree>().Add(&slot_);
     sequencer_.Run([this] {
         return ExcaSocketUpdates{{ {&slot_, ExcaWriteEffect::SocketOff()} }};
     });

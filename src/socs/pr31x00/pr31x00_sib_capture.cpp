@@ -4,7 +4,7 @@
 #include <cerfcore/core/byte_order.h>
 #include <cerfcore/core/cerf_emulator.h>
 #include <cerfcore/core/instance_threads.h>
-#include "../../host/audio_activity_widget.h"
+#include "../../host/audio_activity.h"
 #include "pr31x00_sib_codec.h"
 #include "pr31500_id.h"
 #include "pr31700_id.h"
@@ -26,7 +26,7 @@ bool Pr31x00SibCapture::ShouldRegister() {
 
 void Pr31x00SibCapture::OnReady() {
     codec_ = &emu_.Get<Pr31x00SibCodec>();
-    mic_.Start(emu_.Get<InstanceThreads>(), "SibCapture", kMicFifoBytes);
+    mic_.Start(emu_.Get<InstanceThreads>(), emu_.TryGet<AudioInputs>(), "SibCapture", kMicFifoBytes);
 }
 
 void Pr31x00SibCapture::OnShutdown() {
@@ -70,7 +70,7 @@ uint32_t Pr31x00SibCapture::TelecomReceived() {
 uint32_t Pr31x00SibCapture::NextHostWord(bool sixteen_bit) {
     const uint32_t samples = sixteen_bit ? 2u : 4u;
     uint8_t pcm[8];
-    if (mic_.Take(pcm, samples * 2u) != 0u) emu_.Get<AudioActivityWidget>().MarkRx();
+    if (mic_.Take(pcm, samples * 2u) != 0u) emu_.Get<AudioActivity>().MarkRx();
     uint8_t word[4];
     if (sixteen_bit) {
         for (uint32_t i = 0; i < 2u; ++i)

@@ -1,7 +1,9 @@
 #pragma once
 
 #include "dynamic_rate_resampler.h"
-#include "../platform/wave_out_sink.h"
+#include "wave_out_sink.h"
+
+#include <cerfcore/host/audio_outputs.h>
 
 #include <atomic>
 #include <cstdint>
@@ -16,8 +18,8 @@ class PacedWaveOut {
 public:
     static constexpr uint32_t kMaxBlock = 0x2000u;
 
-    void Start(Fatal& fatal, InstanceThreads& threads, const char* log_tag, uint32_t rate_hz, uint16_t channels,
-               uint16_t bits);
+    void Start(Fatal& fatal, InstanceThreads& threads, AudioOutputs* outputs, const char* log_tag, uint32_t rate_hz,
+               uint16_t channels, uint16_t bits);
     void Stop();
     void SetFormat(uint32_t rate_hz, uint16_t channels, uint16_t bits);
 
@@ -57,6 +59,7 @@ private:
     WaveOutSink           sink_;
     Fatal*                fatal_   = nullptr;
     const char*           log_tag_ = "PacedWaveOut";
+    bool                  has_output_ = false;
     uint8_t               buffers_[kSlots][kMaxBlock] = {};
     uint32_t              slot_length_[kSlots] = {};
     bool                  slot_busy_[kSlots] = {};

@@ -2,7 +2,6 @@
 
 #include "../pcmcia/pcmcia_card.h"
 #include "../serial/serial_16550.h"
-#include "../serial/serial_endpoint_kind.h"
 #include "../serial/serial_line_timer.h"
 
 #include <cstdint>
@@ -15,8 +14,8 @@ class SerialEndpoint;
 
 class SerialPcCard : public PcmciaCard, public SerialLineTimer {
 public:
-    static constexpr const char* kDisplayName        = serial_endpoint_kind::kModemName;
-    static constexpr const char* kForwardDisplayName = serial_endpoint_kind::kForwardName;
+    static constexpr const char* kDisplayName        = "Serial Modem PC Card";
+    static constexpr const char* kForwardDisplayName = "Serial Port Forwarder";
 
     explicit SerialPcCard(CerfEmulator& emu);
     SerialPcCard(CerfEmulator& emu, std::string host_com_port);
@@ -27,11 +26,7 @@ public:
     }
     PcmciaVoltageSense VoltageSense() const override { return { false, false, false }; }
     bool HoldsReadyBusyInReset() const override { return false; }
-    std::string TooltipDetail() const override;
-    const char* IconResource() const override {
-        return mode_ == Mode::HostForward ? "pcmcia_enabled_serial_com"
-                                          : "pcmcia_enabled_serial_modem";
-    }
+    CardFacts Facts() const override;
 
     void OnInserted() override;
 
@@ -45,6 +40,7 @@ public:
     void RestoreState(StateReader& r) override;
     void PostRestore() override;
     void OnShutdown() override;
+    void StopHostIo() override;
     void OnSlotTimer() override;
 
     void ArmLineTimer(int64_t delay_ns) override;

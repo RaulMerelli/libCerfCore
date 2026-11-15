@@ -3,6 +3,8 @@
 #include "serial_line.h"
 #include "serial_line_timer.h"
 
+#include <cerfcore/host/machine_object.h>
+
 #include <cstddef>
 #include <cstdint>
 #include <functional>
@@ -13,7 +15,6 @@
 namespace cerfcore {
 
 class CerfEmulator;
-class HostWidget;
 class SerialCradle;
 class SerialEndpoint;
 class StateWriter;
@@ -31,8 +32,8 @@ public:
     SerialEndpointPort(SerialLine& line, SerialLineTimer& timer, ControlFn control);
     ~SerialEndpointPort();
 
-    void AttachCradle(CerfEmulator& emu, std::string label);
-    void SetActivityWidget(HostWidget* widget) { activity_ = widget; }
+    void AttachCradle(CerfEmulator& emu, ObjectIdentity identity);
+    void SetActivityObject(MachineObject* object) { activity_ = object; }
     void OnShutdown();
 
     void SetEndpoint(SerialEndpoint* ep);
@@ -61,7 +62,7 @@ private:
     SerialLine&      line_;
     SerialLineTimer& timer_;
     ControlFn        control_;
-    HostWidget*      activity_ = nullptr;
+    MachineObject*   activity_ = nullptr;
 
     mutable std::recursive_mutex mu_;
     SerialEndpoint*              endpoint_ = nullptr;

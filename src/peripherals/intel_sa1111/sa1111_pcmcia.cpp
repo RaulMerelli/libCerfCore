@@ -9,7 +9,7 @@
 #include <cerfcore/boards/board_context.h>
 #include "../../boards/hp_jornada_700/hp_jornada_700_family_id.h"
 #include <cerfcore/core/cerf_emulator.h>
-#include <cerfcore/host/host_widget_registry.h>
+#include <cerfcore/host/machine_object_tree.h>
 #include <cerfcore/state/state_stream.h>
 
 #include <mutex>
@@ -17,6 +17,11 @@
 namespace cerfcore {
 
 namespace {
+
+constexpr char kPcCardSlotId[]    = "pc_card_slot";
+constexpr char kPcCardSlotLabel[] = "PC Card slot";
+constexpr char kCfSlotId[]        = "cf_slot";
+constexpr char kCfSlotLabel[]     = "CF slot";
 
 /* SA-1111 PCMCIA interface (Developer's Manual §12.6, base 0x40001800):
    PCCR +0x00 control, PCSSR +0x04 sleep state, PCSR +0x08 read-only
@@ -61,8 +66,8 @@ class Sa1111Pcmcia : public Sa1111Unit, public PcmciaSlotHost {
 public:
     explicit Sa1111Pcmcia(CerfEmulator& emu)
         : Sa1111Unit(emu),
-          slot0_(emu, *this, "PC Card slot"),
-          slot1_(emu, *this, "CF slot"),
+          slot0_(emu, *this, {kPcCardSlotId, kPcCardSlotLabel}),
+          slot1_(emu, *this, {kCfSlotId, kCfSlotLabel}),
           slots_{ &slot0_, &slot1_ } {}
 
     bool ShouldRegister() override {
@@ -110,9 +115,9 @@ public:
 protected:
     void OnUnitReady() override {
         emu_.Get<PcmciaSpaceRouter>().ProvideSockets(slots_[0], slots_[1]);
-        auto& widgets = emu_.Get<HostWidgetRegistry>();
-        widgets.Register(slots_[0]);
-        widgets.Register(slots_[1]);
+        auto& tree = emu_.Get<MachineObjectTree>();
+        tree.Add(slots_[0]);
+        tree.Add(slots_[1]);
         sbi_ = &emu_.Get<Sa1111Sbi>();
         emu_.Get<Sa1111SystemController>().RegisterClockListener(
             [this] { UpdateResetSignals(); });

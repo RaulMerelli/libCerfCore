@@ -7,6 +7,7 @@
 #include <cerfcore/core/cerf_emulator.h>
 #include <cerfcore/core/fatal.h>
 #include <cerfcore/core/log.h>
+#include <cerfcore/host/machine_object_tree.h>
 #include <cerfcore/state/state_stream.h>
 #include <algorithm>
 #include <utility>
@@ -25,6 +26,24 @@ using cerf::le::UN;
 bool FordSyncGen2IlpChannel::ShouldRegister() {
     auto* board = emu_.TryGet<BoardContext>();
     return board && board->GetBoardFamilyId() == BoardFamilyId::FordSyncGen2;
+}
+
+void FordSyncGen2IlpChannel::OnReady() { emu_.Get<MachineObjectTree>().Add(this); }
+
+ChannelCounters FordSyncGen2IlpChannel::Counters() const {
+    return ChannelCounters{received_.load(),    sent_.load(),        accepted_.load(), unsupported_.load(),
+                           invalid_.load(),     unavailable_.load(), malformed_.load()};
+}
+
+std::vector<ChannelSignal> FordSyncGen2IlpChannel::Signals() const {
+    auto&                      signals = emu_.Get<FordSyncGen2IlpSignals>();
+    std::vector<ChannelSignal> out;
+    for (std::size_t i = 0; i < signals.GroundedSignalCount(); ++i) {
+        const uint32_t id       = signals.GroundedSignalIdAt(i);
+        const bool     reported = signals.IsReported(id);
+        out.push_back(ChannelSignal{id, reported, reported ? signals.ReportedValue(id) : 0u});
+    }
+    return out;
 }
 
 bool FordSyncGen2IlpChannel::DecodeSet(const uint8_t* data, std::size_t n,
@@ -54,6 +73,7 @@ bool FordSyncGen2IlpChannel::DecodeSet(const uint8_t* data, std::size_t n,
 void FordSyncGen2IlpChannel::Send(const uint8_t* data, std::size_t n) {
     emu_.Get<FordSyncGen2VmcuPeer>().InjectReliable(kCid, tx_seq_, data, n);
     ++sent_;
+    MarkTx();
     tx_seq_ = static_cast<uint8_t>((tx_seq_ + 1) & 0x7F);
 }
 
@@ -112,6 +132,7 @@ void FordSyncGen2IlpChannel::HandleSet(const uint8_t* data, std::size_t n, uint1
 
 void FordSyncGen2IlpChannel::HandleInbound(const uint8_t* data, std::size_t n) {
     ++received_;
+    MarkRx();
     if (n < 4) { ++malformed_; return; }
     const uint16_t tid = U16(data, 2);
     if (data[0] == 2) { HandleSet(data, n, tid); return; }
@@ -187,6 +208,7 @@ void FordSyncGen2IlpChannel::PowerOn() {
     tx_seq_        = 0;
     watchdog_pets_ = 0;
     emu_.Get<FordSyncGen2IlpSignals>().PowerOn();
+    RefreshSignals();
 }
 
 void FordSyncGen2IlpChannel::OnWatchdogPet() {
@@ -195,11 +217,6 @@ void FordSyncGen2IlpChannel::OnWatchdogPet() {
     for (const auto& device : devices_)
         if (device.watchdog) device.watchdog(watchdog_pets_);
     PublishPending(true);
-}
-
-FordSyncGen2IlpChannel::Counters FordSyncGen2IlpChannel::ReadCounters() const {
-    return {accepted_.load(), unsupported_.load(), invalid_.load(), unavailable_.load(), malformed_.load(),
-        received_.load(), sent_.load()};
 }
 
 void FordSyncGen2IlpChannel::RegisterDevice(Device device) {
@@ -214,6 +231,7 @@ void FordSyncGen2IlpChannel::RegisterDevice(Device device) {
 
 void FordSyncGen2IlpChannel::Refresh(bool force) {
     for (const auto& device : devices_) device.refresh(force);
+    RefreshSignals();
 }
 
 void FordSyncGen2IlpChannel::SaveState(StateWriter& w) const {

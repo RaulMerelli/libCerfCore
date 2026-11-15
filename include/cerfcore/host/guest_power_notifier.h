@@ -20,11 +20,13 @@ public:
     void NotifyHardReset();
 
     void RegisterRebootListener(std::function<void()> fn);
+    void RegisterResetReleasedListener(std::function<void()> fn);
 
 private:
     void Banner(const char* line);
 
     CallbackList<> reboot_listeners_;
+    CallbackList<> reset_released_listeners_;
 };
 
 }

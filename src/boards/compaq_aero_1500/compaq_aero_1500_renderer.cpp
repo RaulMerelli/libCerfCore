@@ -1,7 +1,7 @@
 #include <cerfcore/boards/board_context.h>
 #include <cerfcore/core/board_database.h>
 #include <cerfcore/core/cerf_emulator.h>
-#include <cerfcore/host/panel_frame_renderer.h>
+#include "../../host/panel_frame_renderer.h"
 #include <cerfcore/lcd/lcd_pixel_expand.h>
 #include "../../peripherals/nec_vrc4171a/nec_vrc4171a_frame_memory.h"
 #include "../../peripherals/nec_vrc4171a/nec_vrc4171a_lcd.h"
@@ -48,12 +48,7 @@ public:
         const bool visible =
             scan_.display_on && scan_.vdd_on && giu_->OutputDrive(kPanelPowerGpio) == PinDrive::kHigh;
         lcd_->PublishPanelEnable(visible);
-        if (!visible) return false;
-        if (latch_.Latched()) return true;
-        const uint32_t start = scan_.start & (scan_.memory_bytes - 1u);
-        const size_t   bytes = std::min<size_t>(static_cast<size_t>(scan_.stride) * scan_.height,
-                                                scan_.memory_bytes - start);
-        return latch_.ProbeAndLatch(frame_->Data() + start, bytes);
+        return visible;
     }
 
     void RenderInto(uint32_t* dib, uint32_t host_w, uint32_t host_h) override {

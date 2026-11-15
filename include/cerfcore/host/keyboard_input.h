@@ -9,9 +9,6 @@
 
 namespace cerfcore {
 
-/* A keyboard source. Each concrete self-registers with KeyboardRouter from its
-   OnReady (like peripherals/widgets); the router forwards host keys to the one
-   active source and the keyboard widget switches between them. */
 class KeyboardInput : public Service {
 public:
     using Service::Service;
@@ -23,11 +20,12 @@ public:
     virtual std::vector<SpecialKey> SpecialKeys() const;
     bool HasLetterKeys() const;
 
-    virtual std::string SourceName() const { return "Stock keyboard"; }
+    static constexpr char kSourceName[] = "Stock keyboard";
+    virtual std::string SourceId() const { return "keyboard"; }
+    virtual std::string SourceName() const { return kSourceName; }
     virtual bool Stock() const { return true; }
     virtual int SourcePriority() const { return 0; }
     virtual bool SourceReady() const { return true; }
-    virtual const char* IconResourceName() const { return "keyboard"; }
 };
 
 }

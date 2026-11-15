@@ -20,8 +20,9 @@ public:
     void OnRelativeMove(int dx, int dy, uint32_t button_mask);
     void ReleaseHeld(const HostPointerInputLock::Hold& hold);
 
-    std::string    SourceName()       const override { return "Stock mouse"; }
-    const char*    IconResourceName() const override { return "cursor"; }
+    static constexpr char kSourceName[] = "Stock mouse";
+    std::string    SourceId()         const override { return "mouse"; }
+    std::string    SourceName()       const override { return kSourceName; }
     int            SourcePriority()   const override { return 0; }
     PointerKind    Kind()             const override { return PointerKind::Relative; }
 

@@ -1,10 +1,13 @@
 #pragma once
 
+#include <cerfcore/core/callback_list.h>
 #include <cerfcore/core/service.h>
 #include "../../socs/sh77xx/sh77xx_intc.h"
 
+#include <array>
 #include <atomic>
 #include <cstdint>
+#include <functional>
 #include <span>
 
 namespace cerfcore {
@@ -26,6 +29,7 @@ public:
     void OnReady() override;
 
     void    Drive(Hp600InputNet net, bool high);
+    void    AddNetListener(Hp600InputNet net, std::function<void()> fn);
     uint8_t WiredInputs(uint32_t port) const;
     uint8_t NetLevels(uint32_t port, uint8_t nets) const;
 
@@ -44,8 +48,9 @@ protected:
     virtual uint8_t UndrivenInputs(uint32_t port) const = 0;
 
 private:
-    Sh77xxIntc*           intc_ = nullptr;
-    std::atomic<uint32_t> high_{(1u << kNetCount) - 1u};
+    Sh77xxIntc*                            intc_ = nullptr;
+    std::atomic<uint32_t>                  high_{(1u << kNetCount) - 1u};
+    std::array<CallbackList<>, kNetCount>  listeners_;
 };
 
 }

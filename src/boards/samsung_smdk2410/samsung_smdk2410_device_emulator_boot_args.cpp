@@ -31,13 +31,13 @@ void SamsungSmdk2410DeviceEmulatorBootArgs::OnReady() {
 }
 
 void SamsungSmdk2410DeviceEmulatorBootArgs::WriteBlocks() {
-    auto& cfg = emu_.Get<DeviceConfig>();
-    auto& mem = emu_.Get<EmulatedMemory>();
+    const auto live = emu_.Get<DeviceConfig>().Live();
+    auto&      mem  = emu_.Get<EmulatedMemory>();
 
-    const uint16_t w   = static_cast<uint16_t>(cfg.board_configurable_screen_width);
-    const uint16_t h   = static_cast<uint16_t>(cfg.board_configurable_screen_height);
-    const uint16_t bpp = cfg.board_configurable_screen_bpp != 0u
-                       ? static_cast<uint16_t>(cfg.board_configurable_screen_bpp)
+    const uint16_t w   = static_cast<uint16_t>(live->board_configurable_screen_width);
+    const uint16_t h   = static_cast<uint16_t>(live->board_configurable_screen_height);
+    const uint16_t bpp = live->board_configurable_screen_bpp != 0u
+                       ? static_cast<uint16_t>(live->board_configurable_screen_bpp)
                        : kDefaultColorDepthBpp;
 
     for (const SamsungSmdk2410DeviceEmulatorArgsBlock& block : Blocks()) {

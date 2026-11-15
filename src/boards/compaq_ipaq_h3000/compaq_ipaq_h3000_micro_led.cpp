@@ -2,12 +2,11 @@
 
 #include "compaq_ipaq_h3000_battery.h"
 #include "compaq_ipaq_h3000_family_id.h"
-#include "../../core/steady_time.h"
 
 #include <cerfcore/boards/board_context.h>
 #include <cerfcore/core/cerf_emulator.h>
 #include <cerfcore/core/fatal.h>
-#include <cerfcore/host/host_widget_registry.h>
+#include <cerfcore/host/machine_object_tree.h>
 #include <cerfcore/state/state_stream.h>
 
 namespace cerfcore {
@@ -16,16 +15,13 @@ namespace {
 
 constexpr uint8_t   kColorYellow       = 0;
 constexpr uint8_t   kColorGreen        = 1;
-constexpr uint64_t  kMicrosPerTick     = 100000;
-constexpr uint64_t  kTicksForZero      = 256;
-constexpr uint64_t  kChargeBlinkHalfMs = 1000;
-constexpr WidgetRgb kClrGreen{120, 255, 140};
-constexpr WidgetRgb kClrYellow{255, 200, 40};
-constexpr WidgetRgb kClrDark{34, 44, 36};
-constexpr WidgetRgb kClrRim{150, 160, 150};
-constexpr int       kRadius = 6;
+constexpr uint32_t  kMsPerTick         = 100;
+constexpr uint32_t  kTicksForZero      = 256;
+constexpr uint32_t  kChargeBlinkHalfMs = 1000;
+constexpr ObjectRgb kClrGreen{120, 255, 140};
+constexpr ObjectRgb kClrYellow{255, 200, 40};
 
-uint64_t Ticks(uint8_t field) { return field == 0u ? kTicksForZero : field; }
+uint32_t Ticks(uint8_t field) { return field == 0u ? kTicksForZero : field; }
 
 }
 
@@ -38,7 +34,8 @@ bool CompaqIpaqH3000MicroLed::ShouldRegister() {
 
 void CompaqIpaqH3000MicroLed::OnReady() {
     battery_ = &emu_.Get<CompaqIpaqH3000Battery>();
-    emu_.Get<HostWidgetRegistry>().Register(this);
+    battery_->AddChangeListener([this] { Refresh(); });
+    emu_.Get<MachineObjectTree>().Add(this);
 }
 
 void CompaqIpaqH3000MicroLed::SetLed(const uint8_t* req, uint8_t len) {
@@ -49,13 +46,19 @@ void CompaqIpaqH3000MicroLed::SetLed(const uint8_t* req, uint8_t len) {
         emu_.Get<Fatal>().Die("CompaqIpaqH3000MicroLed: LED request %02X %02X %02X %02X",
                               req[0], req[1], req[2], req[3]);
     }
-    std::lock_guard<std::mutex> lk(mtx_);
-    led_ = Setting{req[0], req[1], req[2], req[3]};
+    {
+        std::lock_guard<std::mutex> lk(mtx_);
+        led_ = Setting{req[0], req[1], req[2], req[3]};
+    }
+    Refresh();
 }
 
 void CompaqIpaqH3000MicroLed::PowerOn() {
-    std::lock_guard<std::mutex> lk(mtx_);
-    led_ = Setting{};
+    {
+        std::lock_guard<std::mutex> lk(mtx_);
+        led_ = Setting{};
+    }
+    Refresh();
 }
 
 void CompaqIpaqH3000MicroLed::SaveState(StateWriter& w) {
@@ -79,39 +82,13 @@ CompaqIpaqH3000MicroLed::Setting CompaqIpaqH3000MicroLed::Current() const {
     return led_;
 }
 
-CompaqIpaqH3000MicroLed::Glow CompaqIpaqH3000MicroLed::GlowNow() const {
-    const Setting  s    = Current();
-    const uint64_t tick = HostSteadyMicros() / kMicrosPerTick;
-    if (s.color == kColorGreen) {
-        const uint64_t on = Ticks(s.on_time);
-        return tick % (on + Ticks(s.off_time)) < on ? Glow::kGreen : Glow::kDark;
-    }
-    if (!battery_->OnAc()) return Glow::kDark;
-    if (!battery_->Charging()) return Glow::kYellow;
-    return HostSteadySquareWaveHigh(kChargeBlinkHalfMs) ? Glow::kYellow : Glow::kDark;
-}
-
-std::string CompaqIpaqH3000MicroLed::Tooltip() const {
-    if (Current().color == kColorGreen) return "Alarm/charge LED - alarm";
-    if (!battery_->OnAc()) return "Alarm/charge LED - off";
-    return battery_->Charging() ? "Alarm/charge LED - charging" : "Alarm/charge LED - charged";
-}
-
-WidgetIcon CompaqIpaqH3000MicroLed::Icon() const {
-    switch (GlowNow()) {
-        case Glow::kGreen:  return LedIcon{kClrGreen, kClrRim, kRadius};
-        case Glow::kYellow: return LedIcon{kClrYellow, kClrRim, kRadius};
-        case Glow::kDark:   break;
-    }
-    return LedIcon{kClrDark, kClrRim, kRadius};
-}
-
-bool CompaqIpaqH3000MicroLed::PollDirty() {
-    const Glow glow = GlowNow();
-    if (drawn_once_ && glow == last_drawn_) return false;
-    drawn_once_ = true;
-    last_drawn_ = glow;
-    return true;
+LampState CompaqIpaqH3000MicroLed::Lamp() const {
+    const Setting s = Current();
+    if (s.color == kColorGreen)
+        return LampState{true, true, kClrGreen, Ticks(s.on_time) * kMsPerTick, Ticks(s.off_time) * kMsPerTick};
+    if (!battery_->OnAc()) return LampState{false, false, kClrYellow};
+    if (!battery_->Charging()) return LampState{true, false, kClrYellow};
+    return LampState{true, true, kClrYellow, kChargeBlinkHalfMs, kChargeBlinkHalfMs};
 }
 
 }

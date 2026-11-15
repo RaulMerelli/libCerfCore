@@ -35,7 +35,8 @@ public:
     uint32_t MmioBase() const override { return kBase; }
     uint32_t MmioSize() const override { return kSize; }
 
-    std::string Tooltip() const override { return "NOR Flash - Spansion S29GL256 (32 MB)"; }
+    static constexpr char kObjectName[] = "Spansion S29GL256";
+    std::string ObjectName() const override { return kObjectName; }
 
 protected:
     uint32_t AutoSelectIdent() const override { return kIdent; }

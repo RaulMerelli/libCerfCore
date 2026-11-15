@@ -23,7 +23,8 @@ public:
 
     void OnReady() override { emu_.Get<KeyboardRouter>().Register(this); }
 
-    std::string SourceName() const override { return "HC-4100 keyboard"; }
+    static constexpr char kSourceName[] = "HC-4100 keyboard";
+    std::string SourceName() const override { return kSourceName; }
 
     void OnHostKey(uint8_t vk, bool key_up) override {
         uint32_t code;

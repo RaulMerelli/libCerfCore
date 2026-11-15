@@ -1,13 +1,16 @@
 #pragma once
 
 #include "pcmcia_card.h"
+#include "pcmcia_swap_gap.h"
 #include "../external_device_clock.h"
 
 #include <atomic>
 #include <cstdint>
 #include <memory>
 #include <mutex>
+#include <optional>
 #include <string>
+#include <vector>
 
 namespace cerfcore {
 
@@ -26,13 +29,11 @@ public:
     static constexpr uint8_t kUnstatedUndrivenDataLane = 0xFFu;
 };
 
-/* One physical PCMCIA socket. Lock hierarchy: bus_mutex_ > backend rx-callback
-   mutex > card mutex > controller mutex. */
-class PcmciaSlot : public HostWidget {
+class PcmciaSlot : public MachineSocket {
 public:
-    PcmciaSlot(CerfEmulator& emu, PcmciaSlotHost& host, std::string label);
+    PcmciaSlot(CerfEmulator& emu, PcmciaSlotHost& host, ObjectIdentity identity);
 
-    void SetLabel(std::string label) { label_ = std::move(label); }
+    void SetIdentity(ObjectIdentity identity) { identity_ = std::move(identity); }
 
     bool HasCard()   const { return (pins_.load(std::memory_order_acquire) & kPinPresent) != 0u; }
     bool IsPowered() const {
@@ -73,10 +74,8 @@ public:
 
     void InsertCard(std::unique_ptr<PcmciaCard> card);
 
-    /* Eject on behalf of a card whose host resource died, keyed on the residency id
-       it was given at insert: the request is dispatched from a UI job, by which time
-       the card may already be gone and another may hold the slot. */
     void EjectCardIfResident(uint64_t card_id);
+    void ReportCardFailure(uint64_t card_id, const char* reason, uint32_t code);
 
     /* Forward the CerfEmulator quiesce phase to the resident card so it can
        detach from peers before any service is destroyed. Owning controllers
@@ -87,13 +86,17 @@ public:
     void RestoreSlotState(StateReader& r);
     void PostRestoreSlot();
 
-    /* HostWidget. */
-    std::string WidgetName() const override { return label_; }
-    WidgetGroup Group() const override { return WidgetGroup::Pcmcia; }
-    std::string Tooltip() const override;
-    std::vector<WidgetControl> Controls() override;
-    WidgetIcon  Icon() const override;
-    bool PollDirty() override;
+    std::string       ObjectId() const override { return identity_.id; }
+    std::string       ObjectName() const override { return identity_.name; }
+    MachineObjectKind ObjectKind() const override { return MachineObjectKind::kPcCardSocket; }
+
+    std::optional<InsertedItem>  Inserted() const override;
+    std::vector<InsertableType> Accepted() const override;
+    void Eject() override;
+
+protected:
+    void InsertAccepted(const std::string& type_id, const std::string& command_id,
+                        const std::string& argument) override;
 
 private:
     static constexpr uint8_t kPinPresent = 0x01u;
@@ -103,57 +106,43 @@ private:
     static constexpr uint8_t kPinLowVoltageKey = 0x10u;
     static constexpr uint8_t kLineIreq = 0x01u;
     static constexpr uint8_t kLineBusy = 0x02u;
-    struct UiView {
-        const char*                icon = "pcmcia";
-        std::string                tooltip_detail;
-        std::string                save_id;
-        std::string                display_name;
-        std::vector<WidgetControl> card_controls;
-        uint64_t                   generation = 0;
-        bool                       has_card   = false;
-    };
 
     void PublishPinsLocked();
-    void PublishUiLocked();
+    void PublishInsertedLocked();
+    void Announce(bool ejected, bool inserted);
+    void RestoreSlotBodyLocked(StateReader& r, bool& ejected, bool& inserted);
     void DriveLine(uint8_t source, bool low);
     bool CardSelectedLocked();
 
     void InsertLocked(std::unique_ptr<PcmciaCard> card);
     void EjectLocked();
+    void SeatHeld(std::unique_ptr<PcmciaCard> card);
     void OnCardTimer();
     ExternalDeviceClock::Timer& CardTimer();
 
-    /* Menu actions; gen guards against stale popup callbacks firing
-       after the slot's contents changed. */
-    void MenuEject(uint64_t gen);
-    void CombinedSwap(uint64_t gen, std::unique_ptr<PcmciaCard> card);
-    void MenuInsert(uint64_t gen, const std::string& card_id);
-    /* Insert a pre-built card (gen-guarded) - used by card kinds whose
-       insert menu resolves a host resource (e.g. CompactFlash image). */
-    void MenuInsertCard(uint64_t gen, std::unique_ptr<PcmciaCard> card);
-    std::vector<SlotEntry> Available(uint64_t gen);
-    WidgetControl GuardControlLocked(WidgetControl control, uint64_t gen);
-    template <class Fn>
-    Fn GuardLocked(Fn fn, uint64_t gen);
+    std::optional<uint64_t> StopResidentHostIo();
+    void                    CombinedSwap(std::unique_ptr<PcmciaCard> card);
 
     CerfEmulator&   emu_;
     PcmciaSlotHost& host_;
-    std::string     label_;
+    ObjectIdentity  identity_;
 
     mutable std::mutex          bus_mutex_;
     std::unique_ptr<PcmciaCard> card_;
     bool                        powered_ = false;
     bool                        enabled_ = true;
     bool                        reset_asserted_ = false;
+    bool                        shut_down_      = false;
     uint64_t                    generation_ = 0;
     std::atomic<uint8_t>        pins_{0};
     std::atomic<uint8_t>        line_{0};
 
     ExternalDeviceClock::Timer* card_timer_ = nullptr;
 
-    mutable std::mutex ui_mtx_;
-    UiView             ui_;
-    std::string        ui_last_res_;
+    mutable std::mutex          inserted_mtx_;
+    std::optional<InsertedItem> inserted_;
+
+    PcmciaSwapGap gap_;
 };
 
 }

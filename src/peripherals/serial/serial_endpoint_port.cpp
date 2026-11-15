@@ -1,8 +1,7 @@
 #include "serial_endpoint_port.h"
 
 #include <cerfcore/core/cerf_emulator.h>
-#include <cerfcore/host/host_widget.h>
-#include <cerfcore/host/host_widget_registry.h>
+#include <cerfcore/host/machine_object_tree.h>
 #include "serial_cradle.h"
 #include "serial_endpoint.h"
 
@@ -15,10 +14,10 @@ SerialEndpointPort::SerialEndpointPort(SerialLine& line, SerialLineTimer& timer,
 
 SerialEndpointPort::~SerialEndpointPort() = default;
 
-void SerialEndpointPort::AttachCradle(CerfEmulator& emu, std::string label) {
-    cradle_   = std::make_unique<SerialCradle>(emu, line_, std::move(label));
+void SerialEndpointPort::AttachCradle(CerfEmulator& emu, ObjectIdentity identity) {
+    cradle_   = std::make_unique<SerialCradle>(emu, line_, std::move(identity));
     activity_ = cradle_.get();
-    emu.Get<HostWidgetRegistry>().Register(cradle_.get());
+    emu.Get<MachineObjectTree>().Add(cradle_.get());
 }
 
 void SerialEndpointPort::OnShutdown() {

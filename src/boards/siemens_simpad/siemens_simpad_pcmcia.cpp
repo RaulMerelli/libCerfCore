@@ -3,7 +3,7 @@
 #include <cerfcore/boards/board_context.h>
 #include "siemens_simpad_family_id.h"
 #include <cerfcore/core/cerf_emulator.h>
-#include <cerfcore/host/host_widget_registry.h>
+#include <cerfcore/host/machine_object_tree.h>
 #include <cerfcore/socs/guest_cpu_reset.h>
 #include "../../peripherals/pcmcia/pcmcia_auto_insert.h"
 #include "../../peripherals/pcmcia/pcmcia_slot.h"
@@ -14,6 +14,9 @@ namespace cerfcore {
 
 namespace {
 
+constexpr char kPcCardSlotId[]    = "pc_card_slot";
+constexpr char kPcCardSlotLabel[] = "PC Card slot";
+
 /* SIMpad SL4 single PC Card socket (SA-1110 socket 0, window PA 0x20000000).
    CF_CD = GPIO24 active-low (0 = present), CF_IRQ/READY = GPIO1. */
 constexpr uint32_t kGpioCd  = 24u;   /* GPIO_CF_CD  */
@@ -22,7 +25,7 @@ constexpr uint32_t kGpioIrq = 1u;    /* GPIO_CF_IRQ */
 class SiemensSimpadPcmcia : public SiemensSimpadCs3Sink, public PcmciaSlotHost {
 public:
     explicit SiemensSimpadPcmcia(CerfEmulator& emu)
-        : SiemensSimpadCs3Sink(emu), slot_(emu, *this, "PC Card slot") {}
+        : SiemensSimpadCs3Sink(emu), slot_(emu, *this, {kPcCardSlotId, kPcCardSlotLabel}) {}
 
     bool ShouldRegister() override {
         return emu_.Get<BoardContext>().GetBoardFamilyId() == BoardFamilyId::SiemensSimpad;
@@ -30,7 +33,7 @@ public:
 
     void OnReady() override {
         emu_.Get<PcmciaSpaceRouter>().ProvideSockets(&slot_, nullptr);
-        emu_.Get<HostWidgetRegistry>().Register(&slot_);
+        emu_.Get<MachineObjectTree>().Add(&slot_);
 
         auto& gpio = emu_.Get<Sa11xxGpio>();
         gpio.DriveInputPin(kGpioCd, true);    /* empty: CF_CD idles high     */

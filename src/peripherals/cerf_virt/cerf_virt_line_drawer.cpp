@@ -100,7 +100,7 @@ bool CerfVirtLineDrawer::Execute(const CerfLineDescriptor& l) {
         if (n == 1) break;
         walk.Advance();
     }
-    fb_->MarkDirty();
+    fb_->MarkWritten(dst.host_base);
     return true;
 }
 

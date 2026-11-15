@@ -5,6 +5,7 @@
 #include <cerfcore/core/fatal.h>
 #include <cerfcore/core/log.h>
 #include <cerfcore/host/guest_power_notifier.h>
+#include <cerfcore/state/emulation_freeze.h>
 #include "../execution/engine_bridge.h"
 
 namespace cerfcore {
@@ -18,6 +19,11 @@ void GuestCpuReset::SetCauseLatch(ResetCauseLatch* latch) {
                               "mean a ShouldRegister gate is wrong");
     }
     latch_ = latch;
+}
+
+void GuestCpuReset::WarmResetFromHost() {
+    auto frozen = emu_.Get<EmulationFreeze>().WorkerSection();
+    WarmReset();
 }
 
 void GuestCpuReset::Request(ResetLineKind kind) {

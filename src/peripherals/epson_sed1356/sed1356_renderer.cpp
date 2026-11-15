@@ -6,7 +6,7 @@
 #include <cerfcore/core/cerf_emulator.h>
 #include <cerfcore/core/fatal.h>
 #include <cerfcore/core/log.h>
-#include <cerfcore/host/panel_frame_renderer.h>
+#include "../../host/panel_frame_renderer.h"
 #include <cerfcore/lcd/lcd_pixel_expand.h>
 
 #include <cstring>
@@ -34,14 +34,13 @@ public:
     bool HasFrame() override {
         auto& sed = emu_.Get<Sed1356>();
         if (!sed.LcdDisplayOn()) return false;
-        if (latch_.Latched())    return true;
         const uint32_t bpp    = sed.LcdBpp();
         const uint32_t stride = sed.LcdStrideBytes();
         const uint32_t start  = sed.VramWrap(sed.LcdStartByte());
         if (bpp == 0 || stride == 0) return false;
         const size_t bytes = (size_t)stride * sed.LcdGuestH();
         if (start + bytes > sed.VramSize()) return false;
-        return latch_.ProbeAndLatch(sed.VramData() + start, bytes);
+        return true;
     }
 
     void RenderInto(uint32_t* dib, uint32_t host_w, uint32_t host_h) override {

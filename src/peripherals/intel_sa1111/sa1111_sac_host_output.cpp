@@ -23,7 +23,7 @@ bool Sa1111SacHostOutput::ShouldRegister() {
 }
 
 void Sa1111SacHostOutput::OnReady() {
-    out_.Start(emu_.Get<Fatal>(), emu_.Get<InstanceThreads>(), "Sa1111Sac", kHostIdleRateHz, kChannels, kBitsPerSample);
+    out_.Start(emu_.Get<Fatal>(), emu_.Get<InstanceThreads>(), emu_.TryGet<AudioOutputs>(), "Sa1111Sac", kHostIdleRateHz, kChannels, kBitsPerSample);
     rate_ = kHostIdleRateHz;
 }
 

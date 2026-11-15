@@ -9,7 +9,7 @@
 #include <cerfcore/core/fatal.h>
 #include <cerfcore/core/log.h>
 #include <cerfcore/cpu/emulated_memory.h>
-#include <cerfcore/host/panel_frame_renderer.h>
+#include "../../host/panel_frame_renderer.h"
 #include <cerfcore/lcd/lcd_pixel_expand.h>
 
 #include <cstring>
@@ -43,20 +43,10 @@ public:
 
     bool HasFrame() override {
         auto& ipu = emu_.Get<Imx31Ipu>();
-        const bool enabled = ipu.IsEnabled();
-        if (!enabled)             return false;
-        if (latch_.Latched())     return true;
-        const uint32_t fb_pa = ipu.GetSdcBgFbPa();
+        if (!ipu.IsEnabled()) return false;
+        if (ipu.GetSdcBgFbPa() == 0 || ipu.GetGuestW() <= 1 || ipu.GetGuestH() <= 1) return false;
         const Imx31Ipu::ChannelFormat fmt = ipu.GetSdcBgFormat();
-        const uint32_t guest_w = ipu.GetGuestW();
-        const uint32_t guest_h = ipu.GetGuestH();
-        if (fb_pa == 0 || guest_w <= 1 || guest_h <= 1) return false;
-        if (fmt.pfs == Imx31Ipu::PfsKind::Unknown || fmt.bpp_bits == 0) return false;
-        const size_t pixel_bytes = (fmt.bpp_bits + 7u) / 8u;
-        const size_t fb_bytes = (size_t)guest_w * (size_t)guest_h * pixel_bytes;
-        const bool got = latch_.ProbeAndLatch(emu_.Get<EmulatedMemory>(),
-                                    fb_pa, fb_bytes);
-        return got;
+        return fmt.pfs != Imx31Ipu::PfsKind::Unknown && fmt.bpp_bits != 0;
     }
 
     void RenderInto(uint32_t* dib_bgra32,

@@ -3,7 +3,7 @@
 #include <cerfcore/boards/board_context.h>
 #include "compaq_ipaq_h3000_family_id.h"
 #include <cerfcore/core/cerf_emulator.h>
-#include <cerfcore/host/host_widget_registry.h>
+#include <cerfcore/host/machine_object_tree.h>
 #include "../../peripherals/pcmcia/pcmcia_slot.h"
 #include "../../peripherals/pcmcia/pcmcia_space_router.h"
 #include "../../socs/sa11xx/sa11xx_gpio.h"
@@ -11,6 +11,11 @@
 namespace cerfcore {
 
 namespace {
+
+constexpr char kSlot1Id[]    = "pc_card_slot_1";
+constexpr char kSlot1Label[] = "PC Card slot 1";
+constexpr char kSlot2Id[]    = "pc_card_slot_2";
+constexpr char kSlot2Label[] = "PC Card slot 2";
 
 /* iPAQ H36xx dual-PCMCIA sleeve, pin map per the ROM PCMCIA PDD's
    GPLR tests: CD = GPIO17/10 (low = present), READY_nIREQ = GPIO21/11,
@@ -27,8 +32,8 @@ class CompaqIpaqH3000PcmciaSleeve : public CompaqIpaqH3000EgpioSink,
 public:
     explicit CompaqIpaqH3000PcmciaSleeve(CerfEmulator& emu)
         : CompaqIpaqH3000EgpioSink(emu),
-          slot0_(emu, *this, "PC Card slot 1"),
-          slot1_(emu, *this, "PC Card slot 2"),
+          slot0_(emu, *this, {kSlot1Id, kSlot1Label}),
+          slot1_(emu, *this, {kSlot2Id, kSlot2Label}),
           slots_{ &slot0_, &slot1_ } {}
 
     bool ShouldRegister() override {
@@ -37,9 +42,9 @@ public:
 
     void OnReady() override {
         emu_.Get<PcmciaSpaceRouter>().ProvideSockets(slots_[0], slots_[1]);
-        auto& widgets = emu_.Get<HostWidgetRegistry>();
-        widgets.Register(slots_[0]);
-        widgets.Register(slots_[1]);
+        auto& tree = emu_.Get<MachineObjectTree>();
+        tree.Add(slots_[0]);
+        tree.Add(slots_[1]);
 
         auto& gpio = emu_.Get<Sa11xxGpio>();
         gpio.DriveInputPin(kGpioSleeveDetectA, false);

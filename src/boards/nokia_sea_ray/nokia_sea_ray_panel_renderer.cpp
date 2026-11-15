@@ -3,7 +3,7 @@
 #include "../../socs/msm8255/msm8255_mddi_client.h"
 
 #include <cerfcore/core/cerf_emulator.h>
-#include <cerfcore/host/panel_frame_renderer.h>
+#include "../../host/panel_frame_renderer.h"
 #include "../../lcd/panel_scanout.h"
 #include <cerfcore/boards/board_context.h>
 #include "nokia_sea_ray_family_id.h"
@@ -28,10 +28,7 @@ public:
     }
 
     bool HasFrame() override {
-        const Msm8255MddiSurface s = emu_.Get<Msm8255MddiClient>().Surface();
-        if (!s.visible)       return false;
-        if (latch_.Latched()) return true;
-        return latch_.ProbeAndLatch(s.pixels, s.stride_bytes * s.height);
+        return emu_.Get<Msm8255MddiClient>().Surface().visible;
     }
 
     void RenderInto(uint32_t* dib, uint32_t host_w, uint32_t host_h) override {

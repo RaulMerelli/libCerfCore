@@ -2,7 +2,7 @@
 
 #include <cerfcore/core/cerf_emulator.h>
 #include <cerfcore/core/log.h>
-#include <cerfcore/host/host_widget_registry.h>
+#include <cerfcore/host/machine_object_tree.h>
 #include <cerfcore/socs/guest_cpu_reset.h>
 #include "../../peripherals/pcmcia/pcmcia_space_router.h"
 #include <cerfcore/boards/board_context.h>
@@ -12,6 +12,11 @@
 namespace cerfcore {
 
 namespace {
+
+constexpr char kPcCardSlotId[]    = "pc_card_slot";
+constexpr char kPcCardSlotLabel[] = "PC Card slot";
+constexpr char kCfSlotId[]        = "cf_slot";
+constexpr char kCfSlotLabel[]     = "CompactFlash slot";
 
 /* Socket status word (PA 0x181E0800), decoded from pcmcia.dll sub_12A148C: per
    socket nCD is active-low (bit clear = card present), RDY high = ready,
@@ -25,8 +30,8 @@ constexpr uint32_t kS1Ncd = 0x8u,    kS1Rdy = 0x2u,
 
 HpJornada820Pcmcia::HpJornada820Pcmcia(CerfEmulator& emu)
     : Service(emu),
-      slot0_(emu, *this, "PC Card slot"),
-      slot1_(emu, *this, "CompactFlash slot") {}
+      slot0_(emu, *this, {kPcCardSlotId, kPcCardSlotLabel}),
+      slot1_(emu, *this, {kCfSlotId, kCfSlotLabel}) {}
 
 bool HpJornada820Pcmcia::ShouldRegister() {
     return emu_.Get<BoardContext>().GetBoardFamilyId() == BoardFamilyId::HpJornada820;
@@ -34,9 +39,9 @@ bool HpJornada820Pcmcia::ShouldRegister() {
 
 void HpJornada820Pcmcia::OnReady() {
     emu_.Get<PcmciaSpaceRouter>().ProvideSockets(&slot0_, &slot1_);
-    auto& widgets = emu_.Get<HostWidgetRegistry>();
-    widgets.Register(&slot0_);
-    widgets.Register(&slot1_);
+    auto& tree = emu_.Get<MachineObjectTree>();
+    tree.Add(&slot0_);
+    tree.Add(&slot1_);
     emu_.Get<GuestCpuReset>().RegisterResetListener([this](ResetLineKind kind) {
         if (kind != ResetLineKind::Rtc) return;
         slot0_.PowerCycleCard();

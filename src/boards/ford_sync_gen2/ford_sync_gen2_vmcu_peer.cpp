@@ -6,10 +6,9 @@
 #include <cerfcore/core/cerf_emulator.h>
 #include <cerfcore/core/fatal.h>
 #include <cerfcore/core/log.h>
-#include <cerfcore/core/product_name.h>
 #include <cerfcore/socs/guest_cpu_reset.h>
 #include <cerfcore/boards/board_context.h>
-#include <cerfcore/host/user_alert.h>
+#include <cerfcore/host/machine_object_tree.h>
 #include "ford_sync_gen2_family_id.h"
 #include "../../socs/imx51/imx51_nand_store.h"
 #include "../../socs/imx51/imx51_uart2.h"
@@ -45,6 +44,7 @@ bool FordSyncGen2VmcuPeer::ShouldRegister() {
 void FordSyncGen2VmcuPeer::OnReady() {
     uart_ = &emu_.Get<Imx51Uart2>();
     uart_->AttachEndpoint(this);
+    emu_.Get<MachineObjectTree>().Add(this);
     emu_.Get<GuestCpuReset>().RegisterResetListener([this](ResetLineKind) {
         state_            = PeerState::Down;
         peer_tid_         = 1u;
@@ -194,15 +194,7 @@ void FordSyncGen2VmcuPeer::HandlePmInbound(const uint8_t* pm, std::size_t n) {
             const std::string nand = emu_.Get<Imx51NandStore>().ImagePath();
             LOG(Caution, "[VMCU] reboot request (pm type=0x%02X len=%zu), storage.nand %s\n",
                 static_cast<unsigned>(pm[0]), n, nand.c_str());
-#if !CERF_DEV_MODE
-            emu_.Get<UserAlert>().Show(
-                AlertLevel::kWarning, AlertPlacement::kTopmost,
-                "Sync 2 panic reboot - " CERF_PRODUCT_NAME,
-                "Sync 2 has panicked and requested a reboot over VMCU.\n\n"
-                "One possibility is a dirty/corrupted NAND image: delete " + nand +
-                    " and try flashing again.\n\n"
-                    "CERF does not restart the guest, so it stays alive for debugging.");
-#endif
+            Failed("panic_reboot_request", 0, nand);
             break;
         }
         default:

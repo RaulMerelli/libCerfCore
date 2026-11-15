@@ -2,6 +2,8 @@
 
 #include <cerfcore/core/cerf_emulator.h>
 
+#include <utility>
+
 namespace cerfcore {
 
 void Hp600InputNets::OnReady() {
@@ -9,12 +11,17 @@ void Hp600InputNets::OnReady() {
 }
 
 void Hp600InputNets::Drive(Hp600InputNet net, bool high) {
-    const uint32_t index = static_cast<uint32_t>(net);
-    const uint32_t bit   = 1u << index;
-    if (high) high_.fetch_or(bit, std::memory_order_acq_rel);
-    else high_.fetch_and(~bit, std::memory_order_acq_rel);
+    const uint32_t index  = static_cast<uint32_t>(net);
+    const uint32_t bit    = 1u << index;
+    const uint32_t before = high ? high_.fetch_or(bit, std::memory_order_acq_rel)
+                                 : high_.fetch_and(~bit, std::memory_order_acq_rel);
     const Landing& landing = Landings()[index];
     if (landing.kind == Landing::Kind::kIntcPin) intc_->SetPinLevel(landing.intc, high);
+    if (((before & bit) != 0u) != high) listeners_[index].Call();
+}
+
+void Hp600InputNets::AddNetListener(Hp600InputNet net, std::function<void()> fn) {
+    listeners_[static_cast<uint32_t>(net)].Add(std::move(fn));
 }
 
 uint8_t Hp600InputNets::WiredInputs(uint32_t port) const {

@@ -2,8 +2,8 @@
 
 #include <cerfcore/core/cerf_emulator.h>
 #include <cerfcore/core/log.h>
-#include <cerfcore/host/frame_renderer.h>
 #include <cerfcore/host/hw_screen.h>
+#include <cerfcore/host/machine_object_tree.h>
 
 namespace cerfcore {
 
@@ -26,12 +26,16 @@ void GuestPowerNotifier::NotifyPowerDown() {
 
 void GuestPowerNotifier::NotifyReboot() {
     Banner("!! CERF: CPU reset !!");
-    if (auto* fr = emu_.TryGet<FrameRenderer>()) fr->RearmContentLatch();
     reboot_listeners_.Call();
 }
 
+void GuestPowerNotifier::RegisterResetReleasedListener(std::function<void()> fn) {
+    reset_released_listeners_.Add(std::move(fn));
+}
+
 void GuestPowerNotifier::NotifyResetReleased() {
-    if (auto* fr = emu_.TryGet<FrameRenderer>()) fr->CaptureResetBaseline();
+    emu_.Get<MachineObjectTree>().RefreshAll();
+    reset_released_listeners_.Call();
 }
 
 void GuestPowerNotifier::NotifyResume(ResumeSource src) {

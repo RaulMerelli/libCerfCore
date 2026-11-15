@@ -2,91 +2,84 @@
 
 #include <cerfcore/core/cerf_emulator.h>
 #include <cerfcore/core/fatal.h>
-#include <cerfcore/core/log.h>
 #include "../compactflash/compactflash_card.h"
-#include "../compactflash/compactflash_insert_entry.h"
+#include "../compactflash/compactflash_commands.h"
 #include "../hp_f1252a/hp_f1252a_card.h"
-#include "../hp_f1252a/hp_f1252a_insert_entry.h"
 #include "../realtek_rtl8019/rtl8019.h"
-#include "../serial/serial_forward_insert_entry.h"
-#include "../serial/serial_modem_insert_entry.h"
+#include "../serial/serial_forward_commands.h"
 #include "../serial_pccard/serial_pccard.h"
+
+#include <utility>
 
 namespace cerfcore {
 
 namespace {
 
+const char kIdCf[]        = "cf";
 const char kIdHpVga[]     = "hpvga";
 const char kIdSerial[]    = "serial";
 const char kIdSerialFwd[] = "serial_fwd";
+const char kInsert[]      = "insert";
 
-}  /* namespace */
-
-void PcmciaCardCatalog::OnReady() {
-    Entry ne2000;
-    ne2000.id           = Rtl8019::kSaveId;
-    ne2000.display_name = Rtl8019::kDisplayName;
-
-    Entry ne2000_3v3;
-    ne2000_3v3.id           = Rtl8019::kSaveId3V3;
-    ne2000_3v3.display_name = Rtl8019::kDisplayName3V3;
-
-    Entry cf;
-    cf.id           = "cf";
-    cf.display_name = "Compact Flash";
-    cf.build_entry = [this](CardInserter inserter) {
-        return emu_.Get<CompactFlashInsertEntry>().BuildInsertEntry(std::move(inserter));
-    };
-
-    Entry hpvga;
-    hpvga.id           = kIdHpVga;
-    hpvga.display_name = HpF1252aCard::kDisplayName;
-    hpvga.build_entry = [this](CardInserter inserter) {
-        return emu_.Get<HpF1252aInsertEntry>().BuildInsertEntry(std::move(inserter));
-    };
-
-    Entry serial;
-    serial.id           = kIdSerial;
-    serial.display_name = SerialPcCard::kDisplayName;
-    serial.build_entry = [this](CardInserter inserter) {
-        return emu_.Get<SerialModemInsertEntry>().BuildInsertEntry(
-            [this, inserter] { inserter(std::make_unique<SerialPcCard>(emu_)); });
-    };
-
-    Entry serial_fwd;
-    serial_fwd.id           = kIdSerialFwd;
-    serial_fwd.display_name = SerialPcCard::kForwardDisplayName;
-    serial_fwd.build_entry = [this](CardInserter inserter) {
-        return emu_.Get<SerialForwardInsertEntry>().BuildInsertEntry(
-            [this, inserter](std::string port) {
-                inserter(std::make_unique<SerialPcCard>(emu_, std::move(port)));
-            });
-    };
-
-    entries_.push_back(std::move(ne2000));
-    entries_.push_back(std::move(ne2000_3v3));
-    entries_.push_back(std::move(cf));
-    entries_.push_back(std::move(hpvga));
-    entries_.push_back(std::move(serial));
-    entries_.push_back(std::move(serial_fwd));
 }
 
-std::unique_ptr<PcmciaCard> PcmciaCardCatalog::TryCreate(const std::string& id,
-                                                         const std::string& binding) {
-    if (id == Rtl8019::kSaveId)    return std::make_unique<Rtl8019>(emu_, Rtl8019::Supply::k5V);
-    if (id == Rtl8019::kSaveId3V3) return std::make_unique<Rtl8019>(emu_, Rtl8019::Supply::k3V3);
-    if (id == "cf")         return std::make_unique<CompactFlashCard>(emu_, binding);
-    if (id == kIdHpVga)     return std::make_unique<HpF1252aCard>(emu_);
-    if (id == kIdSerial)    return std::make_unique<SerialPcCard>(emu_);
-    if (id == kIdSerialFwd) return std::make_unique<SerialPcCard>(emu_, binding);
+void PcmciaCardCatalog::OnReady() {
+    const CommandList insert = [] { return std::vector<InsertCommand>{InsertCommand{kInsert, {}}}; };
+    AddInsertOnly(Rtl8019::kSaveId, Rtl8019::kDisplayName, insert,
+                  [this](const std::string&) { return std::make_unique<Rtl8019>(emu_, Rtl8019::Supply::k5V); });
+    AddInsertOnly(Rtl8019::kSaveId3V3, Rtl8019::kDisplayName3V3, insert,
+                  [this](const std::string&) { return std::make_unique<Rtl8019>(emu_, Rtl8019::Supply::k3V3); });
+    entries_.push_back(Entry{
+        kIdCf, CompactFlashCard::kDisplayName, [this] { return emu_.Get<CompactFlashCommands>().Commands(); },
+        [this](MachineObject& socket, const std::string& command_id, const std::string& argument,
+               CardInserter inserter) {
+            emu_.Get<CompactFlashCommands>().Run(socket, command_id, argument, std::move(inserter));
+        },
+        [this](const std::string& binding) { return std::make_unique<CompactFlashCard>(emu_, binding); }});
+    AddInsertOnly(kIdHpVga, HpF1252aCard::kDisplayName, insert,
+                  [this](const std::string&) { return std::make_unique<HpF1252aCard>(emu_); });
+    AddInsertOnly(kIdSerial, SerialPcCard::kDisplayName, insert,
+                  [this](const std::string&) { return std::make_unique<SerialPcCard>(emu_); });
+    AddInsertOnly(kIdSerialFwd, SerialPcCard::kForwardDisplayName,
+                  [this] { return emu_.Get<SerialForwardCommands>().Commands(); },
+                  [this](const std::string& port) { return std::make_unique<SerialPcCard>(emu_, port); });
+}
+
+void PcmciaCardCatalog::AddInsertOnly(std::string id, std::string display_name, CommandList commands,
+                                      CardFactory create) {
+    CommandRun run = [create](MachineObject&, const std::string&, const std::string& argument,
+                              CardInserter inserter) { inserter.insert(create(argument)); };
+    entries_.push_back(
+        Entry{std::move(id), std::move(display_name), std::move(commands), std::move(run), std::move(create)});
+}
+
+const PcmciaCardCatalog::Entry* PcmciaCardCatalog::Find(const std::string& id) const {
+    for (const Entry& entry : entries_)
+        if (entry.id == id) return &entry;
     return nullptr;
 }
 
-std::unique_ptr<PcmciaCard> PcmciaCardCatalog::Create(const std::string& id,
-                                                      const std::string& binding) {
+std::vector<InsertableType> PcmciaCardCatalog::Accepted() const {
+    std::vector<InsertableType> types;
+    types.reserve(entries_.size());
+    for (const Entry& entry : entries_) types.push_back(InsertableType{entry.id, entry.display_name, entry.commands()});
+    return types;
+}
+
+void PcmciaCardCatalog::Insert(MachineObject& socket, const std::string& type_id, const std::string& command_id,
+                               const std::string& argument, CardInserter inserter) {
+    Find(type_id)->run(socket, command_id, argument, std::move(inserter));
+}
+
+std::unique_ptr<PcmciaCard> PcmciaCardCatalog::TryCreate(const std::string& id, const std::string& binding) {
+    const Entry* entry = Find(id);
+    if (entry == nullptr) return nullptr;
+    return entry->create(binding);
+}
+
+std::unique_ptr<PcmciaCard> PcmciaCardCatalog::Create(const std::string& id, const std::string& binding) {
     auto card = TryCreate(id, binding);
-    if (!card)
-        emu_.Get<Fatal>().Die("PcmciaCardCatalog::Create: unknown card id '%s'", id.c_str());
+    if (!card) emu_.Get<Fatal>().Die("PcmciaCardCatalog::Create: unknown card id '%s'", id.c_str());
     return card;
 }
 

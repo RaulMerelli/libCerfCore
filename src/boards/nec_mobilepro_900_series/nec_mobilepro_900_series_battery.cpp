@@ -1,7 +1,7 @@
 #include "nec_mobilepro_900_series_battery.h"
 
 #include <cerfcore/core/cerf_emulator.h>
-#include <cerfcore/host/host_widget_registry.h>
+#include <cerfcore/host/machine_object_tree.h>
 #include "../../socs/pxa255/pxa255_gpio.h"
 #include <cerfcore/boards/board_context.h>
 #include "nec_mobilepro_900_series_family_id.h"
@@ -46,8 +46,8 @@ bool NecMobilepro900SeriesBattery::ShouldRegister() {
 }
 
 void NecMobilepro900SeriesBattery::OnReady() {
-    battery_.SetChangeHandler([this] { DriveState(); });
-    emu_.Get<HostWidgetRegistry>().Register(&battery_);
+    battery_.AddChangeListener([this] { DriveState(); });
+    emu_.Get<MachineObjectTree>().Add(&battery_);
     DriveState();
 }
 
@@ -71,7 +71,7 @@ uint16_t NecMobilepro900SeriesBattery::MainBatteryRaw(int fill_percent, bool on_
 }
 
 void NecMobilepro900SeriesBattery::DriveState() {
-    const bool on_battery = battery_.IsOnBattery();
+    const bool on_battery = battery_.OnBattery();
     const bool on_ac      = !on_battery;
 
     auto& gpio = emu_.Get<Pxa255Gpio>();
@@ -82,7 +82,7 @@ void NecMobilepro900SeriesBattery::DriveState() {
     gpio.SetInputLevel(kGpioPowerGood,  true);
 
     emu_.Get<NecMobilepro900SeriesPcoCompanion>().SetMainBatteryRaw(
-        MainBatteryRaw(battery_.FillPercent(), on_ac));
+        MainBatteryRaw(battery_.ChargePercent(), on_ac));
 }
 
 REGISTER_SERVICE(NecMobilepro900SeriesBattery);

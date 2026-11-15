@@ -2,7 +2,7 @@
 
 #include <cerfcore/boards/board_context.h>
 #include <cerfcore/core/cerf_emulator.h>
-#include <cerfcore/host/host_widget_registry.h>
+#include <cerfcore/host/machine_object_tree.h>
 #include "../../socs/vr41xx/vr41xx_giu.h"
 #include "ibm_workpad_z50_family_id.h"
 
@@ -66,13 +66,13 @@ void IbmWorkpadZ50Battery::OnReady() {
     giu_->SetPinLevel(kLatchOrLowGpio, false);
     giu_->SetPinLevel(kLiIonPackGpio, false);
     giu_->RegisterOutputDriveListener([this] { NotifyChange(); });
-    battery_.SetChangeHandler([this] { NotifyChange(); });
-    emu_.Get<HostWidgetRegistry>().Register(&battery_);
+    battery_.AddChangeListener([this] { NotifyChange(); });
+    emu_.Get<MachineObjectTree>().Add(&battery_);
 }
 
-bool IbmWorkpadZ50Battery::OnAc() const { return !battery_.IsOnBattery(); }
+bool IbmWorkpadZ50Battery::OnAc() const { return !battery_.OnBattery(); }
 
-int IbmWorkpadZ50Battery::FillPercent() const { return battery_.FillPercent(); }
+int IbmWorkpadZ50Battery::FillPercent() const { return battery_.ChargePercent(); }
 
 bool IbmWorkpadZ50Battery::ChargerDisabled() const {
     return giu_->OutputDrive(kChargerDisableGpio) == PinDrive::kHigh;

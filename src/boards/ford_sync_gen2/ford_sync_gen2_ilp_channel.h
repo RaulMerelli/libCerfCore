@@ -1,5 +1,6 @@
 #pragma once
 #include <cerfcore/core/service.h>
+#include <cerfcore/host/machine_diagnostics_channel.h>
 #include <atomic>
 #include <cstddef>
 #include <cstdint>
@@ -12,9 +13,18 @@ namespace cerfcore {
 class StateWriter;
 class StateReader;
 
-class FordSyncGen2IlpChannel : public Service {
+class FordSyncGen2IlpChannel : public Service, public MachineDiagnosticsChannel {
 public:
     using Service::Service;
+
+    void OnReady() override;
+
+    std::string                ObjectId() const override { return "ilp_diagnostics"; }
+    static constexpr char kObjectName[] = "ILP diagnostics";
+    std::string                ObjectName() const override { return kObjectName; }
+    ChannelCounters            Counters() const override;
+    std::vector<ChannelSignal> Signals() const override;
+
     static constexpr uint8_t kCid = 28;
     struct Write { uint32_t id; uint64_t value; };
     enum class Result { Accepted, Invalid, Unavailable, Unsupported };
@@ -30,7 +40,6 @@ public:
     };
     void RegisterDevice(Device device);
     struct ParseError { const char* reason = nullptr; std::size_t offset = 0; uint32_t id = 0; };
-    struct Counters { uint64_t accepted, unsupported, invalid, unavailable, malformed, received, sent; };
     bool ShouldRegister() override;
     static bool DecodeSet(const uint8_t* data, std::size_t n,
                           std::vector<Write>& writes, ParseError& error);
@@ -38,7 +47,6 @@ public:
     void OnWatchdogPet();
     void OnLinkReset();
     void PowerOn();
-    Counters ReadCounters() const;
     void SaveState(StateWriter& w) const;
     void RestoreState(StateReader& r);
 

@@ -1,33 +1,60 @@
 #pragma once
 
 #include "../core/service.h"
-#include "widget_control.h"
+#include "machine_indicators.h"
 
 #include <cstdint>
 #include <functional>
+#include <memory>
 #include <span>
+#include <string>
 #include <vector>
 
 namespace cerfcore {
+
+class CerfEmulator;
 
 class DeviceButtons : public Service {
 public:
     using Service::Service;
     ~DeviceButtons() override = default;
 
-    std::vector<ActionControl> Actions();
+    void OnReady() override;
+
+    std::vector<MachineButton*> Buttons() const;
 
 protected:
-    virtual std::vector<ActionControl> BoardActions() = 0;
+    struct ButtonSpec {
+        std::string           id;
+        std::string           name;
+        std::function<void()> press;
+    };
 
     struct RawTapButton {
         const char* id;
-        const char* label;
+        const char* name;
         uint16_t    adc_y;
     };
 
-    std::vector<ActionControl> RawTapColumn(std::span<const RawTapButton> buttons, uint16_t adc_x,
-                                            std::function<void(uint16_t, uint16_t)> tap) const;
+    virtual std::vector<ButtonSpec> BoardButtons() = 0;
+
+    std::vector<ButtonSpec> RawTapColumn(std::span<const RawTapButton> buttons, uint16_t adc_x,
+                                         std::function<void(uint16_t, uint16_t)> tap) const;
+
+private:
+    class WiredButton final : public MachineButton {
+    public:
+        WiredButton(CerfEmulator& emu, ButtonSpec spec) : emu_(emu), spec_(std::move(spec)) {}
+        std::string ObjectId() const override { return spec_.id; }
+        std::string ObjectName() const override { return spec_.name; }
+        void        Press() override;
+
+    private:
+        CerfEmulator& emu_;
+        ButtonSpec    spec_;
+    };
+
+    std::vector<std::unique_ptr<WiredButton>> buttons_;
 };
 
 }

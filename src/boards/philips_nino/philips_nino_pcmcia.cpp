@@ -9,12 +9,15 @@ namespace cerfcore {
 
 namespace {
 
+constexpr char kCfSlotId[]    = "cf_slot";
+constexpr char kCfSlotLabel[] = "CompactFlash slot";
+
 constexpr uint32_t kIt8368IntMfioPin = 2;
 
 class PhilipsNinoPcmcia : public IteIt8368SocketHost {
 public:
     explicit PhilipsNinoPcmcia(CerfEmulator& emu)
-        : IteIt8368SocketHost(emu, "CompactFlash slot") {}
+        : IteIt8368SocketHost(emu, {kCfSlotId, kCfSlotLabel}) {}
 
     bool ShouldRegister() override {
         auto* bd = emu_.TryGet<BoardContext>();

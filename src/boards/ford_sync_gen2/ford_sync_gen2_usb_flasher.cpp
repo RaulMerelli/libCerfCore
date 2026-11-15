@@ -7,8 +7,8 @@
 #include <cerfcore/core/service.h>
 #include <cerfcore/boards/board_context.h>
 #include "ford_sync_gen2_family_id.h"
-#include <cerfcore/host/host_widget.h>
-#include <cerfcore/host/host_widget_registry.h>
+#include <cerfcore/host/machine_object.h>
+#include <cerfcore/host/machine_object_tree.h>
 #include "../../peripherals/usb/usb_device.h"
 #include "../../socs/imx51/imx51_usboh3.h"
 #include <cerfcore/state/state_stream.h>
@@ -28,7 +28,7 @@ using cerf::le::U32;
    flasher). Control-request encodings grounded in SBOOT sub_8005F0A4 /
    sub_8005EAFC / sub_8005EE80 / sub_8005EECC; the post-enumeration download
    protocol in sub_8004FF60. */
-class FordSyncGen2UsbFlasher : public Service, public UsbDeviceHost, public HostWidget {
+class FordSyncGen2UsbFlasher : public Service, public UsbDeviceHost, public MachineObject {
 public:
     using Service::Service;
 
@@ -39,7 +39,7 @@ public:
 
     void OnReady() override {
         emu_.Get<Imx51Usboh3>().RegisterDeviceHost(this);
-        emu_.Get<HostWidgetRegistry>().Register(this);
+        emu_.Get<MachineObjectTree>().Add(this);
     }
 
     void OnDeviceReset() override {
@@ -62,7 +62,7 @@ public:
         return ServeDownload(dst, max);
     }
 
-    void SaveWidgetState(StateWriter& w) const override {
+    void SaveObjectState(StateWriter& w) const override {
         w.Write<uint8_t>("step", static_cast<uint8_t>(step_));
         w.Write("conf_total", conf_total_);
         w.Write<uint8_t>("dl", static_cast<uint8_t>(dl_));
@@ -71,7 +71,7 @@ public:
         w.Write("seg_off", seg_off_);
         w.Write("seg_remaining", seg_remaining_);
     }
-    void RestoreWidgetState(StateReader& r) override {
+    void RestoreObjectState(StateReader& r) override {
         uint8_t s = 0; r.Read("step", s); step_ = static_cast<Step>(s);
         r.Read("conf_total", conf_total_);
         uint8_t d = 0; r.Read("dl", d); dl_ = static_cast<DlPhase>(d);
@@ -82,10 +82,10 @@ public:
     }
 
     // Once we have USB somewhere, this should become hot-pluggable device follwing PCMCIA example
-    std::string WidgetName() const override { return "USB"; }
-    WidgetGroup Group() const override { return WidgetGroup::Usb; }
-    std::string Tooltip() const override { return "USB - [Ford Sync 2] Factory Flashing Tool"; }
-    WidgetIcon  Icon() const override { return ResourceIcon{"usb_ford_flasher"}; }
+    std::string       ObjectId() const override { return "usb"; }
+    static constexpr char kObjectName[] = "[Ford Sync 2] Factory Flashing Tool";
+    std::string       ObjectName() const override { return kObjectName; }
+    MachineObjectKind ObjectKind() const override { return MachineObjectKind::kUsbFlasher; }
 
 private:
     enum class Step { kIdle, kDevDesc, kSetAddr, kConfShort, kConfFull, kSetConfig, kConfigured };

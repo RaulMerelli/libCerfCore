@@ -1,18 +1,18 @@
 #pragma once
 
 #include <cerfcore/core/service.h>
+#include <cerfcore/host/machine_object.h>
 
 #include <functional>
 #include <optional>
-#include <string>
 
 namespace cerfcore {
 
 struct Vr41xxSerialModem {
-    Vr41xxSerialModem(std::string label_in, int carrier_gpio_in);
+    Vr41xxSerialModem(ObjectIdentity port_in, int carrier_gpio_in);
 
-    std::string label;
-    int         carrier_gpio;
+    ObjectIdentity port;
+    int            carrier_gpio;
 };
 
 class Vr41xxSerialWiring : public Service {

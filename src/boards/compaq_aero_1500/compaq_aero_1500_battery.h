@@ -1,7 +1,7 @@
 #pragma once
 
 #include <cerfcore/core/service.h>
-#include "../../host/battery_widget.h"
+#include <cerfcore/host/battery.h>
 
 #include <cstdint>
 #include <mutex>
@@ -35,7 +35,7 @@ private:
     Vr41xxGiu*      giu_     = nullptr;
     NecVrc4171aLcd* lcd_     = nullptr;
     NecVrc4171a*    vrc4171_ = nullptr;
-    BatteryWidget   battery_;
+    Battery         battery_{emu_};
 
     std::mutex mtx_;
     uint16_t   voltage_word_ = 0;

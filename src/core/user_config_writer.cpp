@@ -15,6 +15,7 @@ bool UserConfigWriter::WriteConfigurableScreenSize(uint32_t width,
                                                    uint32_t height) {
     if (width == 0 || height == 0) return false;
 
+    std::lock_guard<std::mutex> lk(mtx_);
     auto& config = emu_.Get<DeviceConfig>();
     const std::string path = UserConfigPath(config.device_name);
 
@@ -33,15 +34,18 @@ bool UserConfigWriter::WriteConfigurableScreenSize(uint32_t width,
         return false;
     }
 
-    config.board_configurable_screen_width    = width;
-    config.board_configurable_screen_height   = height;
-    config.board_configurable_screen_explicit = true;
+    config.EditLive([width, height](LiveDeviceSettings& live) {
+        live.board_configurable_screen_width    = width;
+        live.board_configurable_screen_height   = height;
+        live.board_configurable_screen_explicit = true;
+    });
     LOG(Cfg, "UserConfigWriter: persisted guest resolution %ux%u\n", width,
         height);
     return true;
 }
 
 void UserConfigWriter::WriteHud(const std::string& hud) {
+    std::lock_guard<std::mutex> lk(mtx_);
     auto&             config = emu_.Get<DeviceConfig>();
     const std::string path   = UserConfigPath(config.device_name);
 
@@ -58,7 +62,7 @@ void UserConfigWriter::WriteHud(const std::string& hud) {
         return;
     }
 
-    config.hud = hud;
+    config.EditLive([&hud](LiveDeviceSettings& live) { live.hud = hud; });
     LOG(Cfg, "UserConfigWriter: persisted hud '%s'\n", hud.c_str());
 }
 

@@ -3,7 +3,7 @@
 #include <cerfcore/boards/board_context.h>
 #include <cerfcore/core/byte_order.h>
 #include <cerfcore/core/cerf_emulator.h>
-#include <cerfcore/host/panel_frame_renderer.h>
+#include "../../host/panel_frame_renderer.h"
 #include <cerfcore/lcd/lcd_pixel_expand.h>
 #include "../../boards/hp_600/hp_600_family_id.h"
 #include "hd64461_lcdc.h"
@@ -34,10 +34,7 @@ public:
     }
 
     bool HasFrame() override {
-        const Hd64461Lcdc::Scanout s = emu_.Get<Hd64461Lcdc>().GetScanout();
-        if (!Shows(s)) return false;
-        if (latch_.Latched()) return true;
-        return latch_.ProbeAndLatch(s.fb, s.frame_bytes);
+        return Shows(emu_.Get<Hd64461Lcdc>().GetScanout());
     }
 
     void RenderInto(uint32_t* dib_bgra32, uint32_t host_w, uint32_t host_h) override {

@@ -218,9 +218,7 @@ private:
             }
             case kGetBatteryData: {
                 /* §4.5: 3 bytes [main_low, backup_low, combined], each ADC
-                   10-bit; combined bits 0,1 = main 8,9 and bits 2,3 = backup 8,9.
-                   Main mapped from the widget fill via the battery driver's own
-                   bands; backup = a healthy coin cell. */
+                   10-bit; combined bits 0,1 = main 8,9 and bits 2,3 = backup 8,9. */
                 const uint16_t main_adc =
                     MainAdcForFill(emu_.Get<HpJornada700Battery>().FillPercent());
                 constexpr uint16_t kBackupAdc = 0x390;   /* >0x383 -> HIGH (battdrv.dll sub_ED1AC8). */

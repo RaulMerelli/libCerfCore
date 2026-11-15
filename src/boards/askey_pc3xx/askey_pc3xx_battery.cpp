@@ -2,8 +2,8 @@
 
 #include <cerfcore/core/byte_order.h>
 #include <cerfcore/core/cerf_emulator.h>
-#include "../../host/battery_widget.h"
-#include <cerfcore/host/host_widget_registry.h>
+#include <cerfcore/host/battery.h>
+#include <cerfcore/host/machine_object_tree.h>
 #include "../../socs/pxa255/pxa255_gpio.h"
 #include <cerfcore/state/state_stream.h>
 #include <cerfcore/boards/board_context.h>
@@ -30,7 +30,7 @@ constexpr uint32_t kDataWrites = 16u;    /* 0x69 + command byte. */
 /* Synthetic self-consistent battery (RE-only; the guest decode is the spec).
    percent=round(100*(a4-v13)/(v10-v13)) (sub_17F2654); v10=(calib[0]<<8)|calib[1]
    (sub_17F25A0), v13=210 with zero calib deltas; a4 from resp[4],resp[5]
-   (sub_17F1EF4). Round-trips widget fill 0..100 -> guest % 0..100. */
+   (sub_17F1EF4). */
 constexpr uint32_t kVFull  = 4200u;      /* calib base 0x1068. */
 constexpr uint32_t kVEmpty = 210u;
 
@@ -44,7 +44,7 @@ public:
     }
 
     void OnReady() override {
-        emu_.Get<HostWidgetRegistry>().Register(&battery_);
+        emu_.Get<MachineObjectTree>().Add(&battery_);
         emu_.Get<Pxa255Gpio>().SetSerialSlave(this);
     }
 
@@ -133,7 +133,7 @@ private:
        = telemetry charge a4 (sub_17F1EF4); zero deltas keep empty v13=210. */
     void BuildResponse() {
         for (auto& b : resp_) b = 0u;
-        int fill = battery_.FillPercent();
+        int fill = battery_.ChargePercent();
         if (fill < 0) fill = 0;
         if (fill > 100) fill = 100;
         const uint32_t a4  = kVEmpty + static_cast<uint32_t>(fill) * (kVFull - kVEmpty) / 100u;
@@ -143,7 +143,7 @@ private:
         resp_len_ = 32u;
     }
 
-    BatteryWidget battery_;
+    Battery       battery_{emu_};
 
     /* Bit-bang slot state (JIT thread only, serialized by the GPIO mutex). */
     bool     dir_out_       = false;

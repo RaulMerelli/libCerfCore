@@ -11,7 +11,7 @@ namespace cerfcore {
 namespace {
 
 constexpr int       kChargeLedGpio = 39;
-constexpr WidgetRgb kClrChargeLit{255, 200, 40};
+constexpr ObjectRgb kClrChargeLit{255, 200, 40};
 
 class CompaqAero1500ChargeLedElement : public Vr41xxLedSecondElement {
 public:
@@ -21,11 +21,16 @@ public:
         return emu_.Get<BoardContext>().GetBoardFamilyId() == BoardFamilyId::CompaqAero1500;
     }
 
-    void OnReady() override { giu_ = &emu_.Get<Vr41xxGiu>(); }
+    void OnReady() override {
+        giu_ = &emu_.Get<Vr41xxGiu>();
+        giu_->RegisterOutputDriveListener([this] { Refresh(); });
+    }
 
-    std::string PackageName() const override { return "Charger/alarm LED"; }
-    std::string ElementName() const override { return "Charge LED"; }
-    WidgetRgb   LitColor() const override { return kClrChargeLit; }
+    static constexpr char kPackageName[] = "Charger/alarm LED";
+    std::string PackageName() const override { return kPackageName; }
+    static constexpr char kElementName[] = "Charge LED";
+    std::string ElementName() const override { return kElementName; }
+    ObjectRgb   LitColor() const override { return kClrChargeLit; }
     bool        Lit() const override { return giu_->OutputDrive(kChargeLedGpio) == PinDrive::kHigh; }
 
 private:

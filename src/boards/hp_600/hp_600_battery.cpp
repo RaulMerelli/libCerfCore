@@ -2,7 +2,7 @@
 
 #include <cerfcore/boards/board_context.h>
 #include <cerfcore/core/cerf_emulator.h>
-#include <cerfcore/host/host_widget_registry.h>
+#include <cerfcore/host/machine_object_tree.h>
 #include "hp_600_family_id.h"
 #include "hp_600_input_nets.h"
 #include "hp_600_main_battery_scale.h"
@@ -28,23 +28,23 @@ bool Hp600Battery::ShouldRegister() {
 void Hp600Battery::OnReady() {
     nets_    = &emu_.Get<Hp600InputNets>();
     scale_   = &emu_.Get<Hp600MainBatteryScale>();
-    battery_.SetChangeHandler([this] { DriveAcLine(); });
-    emu_.Get<HostWidgetRegistry>().Register(&battery_);
+    battery_.AddChangeListener([this] { DriveAcLine(); });
+    emu_.Get<MachineObjectTree>().Add(&battery_);
     DriveAcLine();
 }
 
 bool Hp600Battery::Charging() const {
-    return !battery_.IsOnBattery() && battery_.FillPercent() < kFullPercent;
+    return !battery_.OnBattery() && battery_.ChargePercent() < kFullPercent;
 }
 
-bool Hp600Battery::OnExternalPower() const { return !battery_.IsOnBattery(); }
+bool Hp600Battery::OnExternalPower() const { return !battery_.OnBattery(); }
 
 uint16_t Hp600Battery::MainBatteryAdc() const {
-    const int level = std::min((battery_.FillPercent() + kPercentPerLevel / 2) / kPercentPerLevel, kTopLevel);
+    const int level = std::min((battery_.ChargePercent() + kPercentPerLevel / 2) / kPercentPerLevel, kTopLevel);
     if (level == kTopLevel) return scale_->LevelThreshold(kTopLevel);
     return static_cast<uint16_t>(scale_->LevelThreshold(level) - 1u);
 }
 
-void Hp600Battery::DriveAcLine() { nets_->Drive(Hp600InputNet::kAcAdapterOff, battery_.IsOnBattery()); }
+void Hp600Battery::DriveAcLine() { nets_->Drive(Hp600InputNet::kAcAdapterOff, battery_.OnBattery()); }
 
 }

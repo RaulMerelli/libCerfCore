@@ -5,7 +5,7 @@
 #include <cerfcore/core/instance_threads.h>
 #include <cerfcore/state/hibernation.h>
 #include "../../execution/guest_cycle_clock.h"
-#include "../../host/audio_activity_widget.h"
+#include "../../host/audio_activity.h"
 #include "../../host/paced_wave_out.h"
 #include "../../socs/guest_sample_clock.h"
 #include "../../socs/rated_tick_count.h"
@@ -41,9 +41,9 @@ public:
         clock_    = &emu_.Get<GuestCycleClock>();
         dac_      = &emu_.Get<Sh77xxDac>();
         switches_ = &emu_.Get<Hp600AudioSwitches>();
-        activity_ = &emu_.Get<AudioActivityWidget>();
+        activity_ = &emu_.Get<AudioActivity>();
         activity_->NotePresent();
-        paced_.Start(emu_.Get<Fatal>(), emu_.Get<InstanceThreads>(), "Hp600Speaker", kRenderHz, kRenderChannels,
+        paced_.Start(emu_.Get<Fatal>(), emu_.Get<InstanceThreads>(), emu_.TryGet<AudioOutputs>(), "Hp600Speaker", kRenderHz, kRenderChannels,
                      kRenderBits);
         samples_.SetRate(clock_->ClockRate(), kRenderRate);
         clock_->RegisterRateListener([this] { samples_.Rescale(clock_->Cycles(), clock_->ClockRate(), kRenderRate); });
@@ -104,7 +104,7 @@ private:
     GuestCycleClock*     clock_    = nullptr;
     Sh77xxDac*           dac_      = nullptr;
     Hp600AudioSwitches*  switches_ = nullptr;
-    AudioActivityWidget* activity_ = nullptr;
+    AudioActivity* activity_ = nullptr;
     PacedWaveOut         paced_;
     RatedTickCount       samples_{emu_};
     GuestSampleClock     flush_{emu_};

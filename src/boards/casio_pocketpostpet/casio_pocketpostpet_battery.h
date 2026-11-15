@@ -1,7 +1,7 @@
 #pragma once
 
 #include <cerfcore/core/service.h>
-#include "../../host/battery_widget.h"
+#include <cerfcore/host/battery.h>
 
 namespace cerfcore {
 
@@ -12,13 +12,13 @@ public:
     bool ShouldRegister() override;
     void OnReady() override;
 
-    int  FillPercent() const { return battery_.FillPercent(); }
-    bool IsOnBattery() const { return battery_.IsOnBattery(); }
+    int  FillPercent() const { return battery_.ChargePercent(); }
+    bool IsOnBattery() const { return battery_.OnBattery(); }
 
 private:
     void DrivePowerPins();
 
-    BatteryWidget battery_;
+    Battery       battery_{emu_};
 };
 
 }

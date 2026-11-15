@@ -8,6 +8,9 @@ namespace cerfcore {
 
 namespace {
 
+constexpr char kCradlePortId[]    = "cradle_port";
+constexpr char kCradlePortLabel[] = "COM1 (cradle)";
+
 /* UART A ($0B0) is the docking-cradle COM1 serial.dll opens as DeviceArrayIndex 0
    (repllog/ActiveSync, rnaapp dial-up); UART B ($0C8) is the IrDA link, not an
    attach target. CTS=MFIODIN6 DCD=MFIODIN15 DTR=MFIOOUT13 RTS=MFIOOUT1 (serial.dll
@@ -26,7 +29,7 @@ public:
     std::optional<Pr31x00SerialModem> ForUart(uint32_t mmio_base) const override {
         if (mmio_base != kUartA) return std::nullopt;
         Pr31x00SerialModem m;
-        m.label = "COM1 (cradle)";
+        m.port  = {kCradlePortId, kCradlePortLabel};
         m.cts   = Pr31x00SerialPin::OnMfio(6);
         m.dcd   = Pr31x00SerialPin::OnMfio(15);
         m.dtr   = Pr31x00SerialPin::OnMfio(13);

@@ -9,12 +9,15 @@ namespace cerfcore {
 
 namespace {
 
+constexpr char kPcCardSlotId[]    = "pc_card_slot";
+constexpr char kPcCardSlotLabel[] = "PC Card slot";
+
 constexpr uint32_t kIt8368IntMfioPin = 2;
 
 class SharpMobilonHcPcmcia : public IteIt8368SocketHost {
 public:
     explicit SharpMobilonHcPcmcia(CerfEmulator& emu)
-        : IteIt8368SocketHost(emu, "PC Card slot") {}
+        : IteIt8368SocketHost(emu, {kPcCardSlotId, kPcCardSlotLabel}) {}
 
     bool ShouldRegister() override {
         return emu_.Get<BoardContext>().GetBoardFamilyId() == BoardFamilyId::SharpMobilonHc;

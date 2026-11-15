@@ -19,7 +19,7 @@ void CerfVirtCustomizationsReset::OnCustomizationsApplied() {
     LOG(GuestAdditions,
         "registry customizations committed - soft-resetting the guest so GWES "
         "re-reads them\n");
-    emu_.Get<HostPresentation>().ShowCustomizationsRestart();
+    emu_.Get<HostPresentation>().CustomizationsReset();
     emu_.Get<GuestCpuReset>().WarmReset();
 }
 

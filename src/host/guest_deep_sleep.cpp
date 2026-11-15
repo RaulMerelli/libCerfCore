@@ -7,19 +7,15 @@
 #include "../core/steady_time.h"
 #include "../execution/engine_bridge.h"
 #include "../execution/guest_cycle_clock.h"
-#include <cerfcore/state/shutdown_action.h>
 #include <cerfcore/host/guest_power_notifier.h>
 #include <cerfcore/host/notification_stack.h>
-#include <cerfcore/host/shutdown_host.h>
-
-#include <chrono>
 
 namespace cerfcore {
 
 REGISTER_SERVICE(GuestDeepSleep);
 
 namespace {
-constexpr int kResumeGraceMs = 100;
+constexpr char kGuestSleepingText[] = "Guest is in sleep mode";
 }
 
 void GuestDeepSleep::OnReady() {
@@ -56,6 +52,10 @@ void GuestDeepSleep::RegisterUserWakeInput(std::function<void()> fn) {
 
 void GuestDeepSleep::RegisterSleepEntryListener(std::function<void()> fn) {
     sleep_entry_listeners_.Add(std::move(fn));
+}
+
+void GuestDeepSleep::RegisterSleepListener(std::function<void(bool asleep)> fn) {
+    sleep_listeners_.Add(std::move(fn));
 }
 
 void GuestDeepSleep::RegisterParkClock(std::function<void()> fn) {
@@ -103,14 +103,15 @@ void GuestDeepSleep::PollPark() {
         }
     }
     park_clocks_.Call();
-    bool           have   = false;
-    ShutdownChoice choice = ShutdownChoice::Cancel;
+    bool wake = false;
     {
         std::lock_guard<std::mutex> lk(resume_mtx_);
-        have = TakePendingLocked(choice);
+        wake            = wake_requested_;
+        wake_requested_ = false;
     }
-    if (have) {
-        ApplyChoiceInPark(choice);
+    if (wake) {
+        LOG(SocReset, "[DEEPSLEEP] PollPark: the user wakes the guest\n");
+        DeliverWake(ResumeSource::User);
         return;
     }
     for (auto& fn : park_wake_sources_) {
@@ -137,23 +138,7 @@ void GuestDeepSleep::FinishPark() {
 bool GuestDeepSleep::ClaimSleepEnd() {
     if (wake_claimed_.exchange(true, std::memory_order_acq_rel)) return false;
     ConsumeSleepSpan();
-    MarkSleepEnded();
     return true;
-}
-
-bool GuestDeepSleep::TakePendingLocked(ShutdownChoice& choice) {
-    if (!choice_pending_) return false;
-    choice          = pending_choice_;
-    choice_pending_ = false;
-    return true;
-}
-
-void GuestDeepSleep::MarkSleepEnded() {
-    {
-        std::lock_guard<std::mutex> lk(resume_mtx_);
-        sleep_ended_ = true;
-    }
-    resume_cv_.notify_all();
 }
 
 int64_t GuestDeepSleep::SleptNs() const {
@@ -194,7 +179,7 @@ void GuestDeepSleep::Enter() {
     {
         std::lock_guard<std::mutex> lk(resume_mtx_);
         off_.store(true, std::memory_order_release);
-        sleep_ended_ = false;
+        wake_requested_ = false;
     }
     wake_claimed_.store(false, std::memory_order_release);
     emu_.Get<GuestPowerNotifier>().NotifyPowerDown();
@@ -212,30 +197,12 @@ void GuestDeepSleep::Enter() {
         LOG(SocReset, "[DEEPSLEEP] Enter: park wake due in %lld ns\n",
             static_cast<long long>(due_in));
     }
-    RePrompt();
 }
 
-void GuestDeepSleep::RePrompt() {
-    {
-        std::lock_guard<std::mutex> lk(resume_mtx_);
-        if (prompt_open_ || choice_pending_ || !off_.load(std::memory_order_acquire)) return;
-        prompt_open_ = true;
-    }
-    emu_.Get<ShutdownHost>().RunPromptJob([this] { Recover(); });
-}
-
-void GuestDeepSleep::ApplyChoiceInPark(ShutdownChoice c) {
-    if (c == ShutdownChoice::Cancel) {
-        DeliverWake(ResumeSource::User);
-        return;
-    }
-    if (!ClaimSleepEnd()) {
-        LOG(SocReset, "[DEEPSLEEP] PollPark: choice=%d dropped, a wake already ended the sleep\n",
-            static_cast<int>(c));
-        return;
-    }
-    LOG(SocReset, "[DEEPSLEEP] PollPark: user choice=%d ends the sleep\n", static_cast<int>(c));
-    emu_.Get<ShutdownAction>().Perform(c);
+void GuestDeepSleep::Resume() {
+    std::lock_guard<std::mutex> lk(resume_mtx_);
+    if (!off_.load(std::memory_order_acquire)) return;
+    wake_requested_ = true;
 }
 
 void GuestDeepSleep::OnGuestIdle() {
@@ -243,35 +210,19 @@ void GuestDeepSleep::OnGuestIdle() {
     {
         std::lock_guard<std::mutex> lk(resume_mtx_);
         off_.store(false, std::memory_order_release);
-        if (choice_pending_ && pending_choice_ == ShutdownChoice::Cancel) choice_pending_ = false;
+        wake_requested_ = false;
     }
-    resume_cv_.notify_all();
     LOG(SocReset, "[DEEPSLEEP] guest idle after a wake: the guest is on\n");
-    emu_.Get<ShutdownHost>().RunPromptJob([this] {
-        if (!asking_ || off_.load(std::memory_order_acquire)) return;
-        emu_.Get<ShutdownHost>().DismissPrompt();
-    });
 }
 
 void GuestDeepSleep::ObserveAsleep(bool asleep) {
-    bool           have   = false;
-    ShutdownChoice choice = ShutdownChoice::Cancel;
-    {
-        std::lock_guard<std::mutex> lk(resume_mtx_);
-        asleep_.store(asleep, std::memory_order_release);
-        if (!asleep && choice_pending_ && pending_choice_ != ShutdownChoice::Cancel)
-            have = TakePendingLocked(choice);
-    }
+    asleep_.store(asleep, std::memory_order_release);
     auto& stack = emu_.Get<NotificationStack>();
     if (asleep)
-        stack.Show(NotificationId::GuestSleeping, NotificationKind::Warning,
-                   "Guest is in sleep mode");
+        stack.Show(NotificationId::GuestSleeping, NotificationKind::Warning, kGuestSleepingText);
     else
         stack.Close(NotificationId::GuestSleeping);
-    if (!have) return;
-    LOG(SocReset, "[DEEPSLEEP] RunLoop: user choice=%d runs on the woken guest\n",
-        static_cast<int>(choice));
-    emu_.Get<ShutdownAction>().Perform(choice);
+    sleep_listeners_.Call(asleep);
 }
 
 void GuestDeepSleep::ConsumeSleepSpan() {
@@ -309,49 +260,11 @@ void GuestDeepSleep::OnFullRestore() {
     ConsumeSleepSpan();
     {
         std::lock_guard<std::mutex> lk(resume_mtx_);
-        choice_pending_ = false;
+        wake_requested_ = false;
     }
     const bool asleep = emu_.Get<EngineBridge>().Guest().DeepSleep();
     wake_claimed_.store(!asleep, std::memory_order_release);
     if (asleep) DeliverWake(ResumeSource::User);
-}
-
-void GuestDeepSleep::Recover() {
-    auto&      host  = emu_.Get<ShutdownHost>();
-    const auto ended = [this] { return sleep_ended_ || !off_.load(std::memory_order_acquire); };
-    {
-        std::unique_lock<std::mutex> lk(resume_mtx_);
-        resume_cv_.wait_for(lk, std::chrono::milliseconds(kResumeGraceMs), ended);
-        if (ended() || host.PromptOpen()) {
-            prompt_open_ = false;
-            return;
-        }
-    }
-    LOG(SocReset, "[DEEPSLEEP] Recover: prompt open\n");
-    asking_                = true;
-    const ShutdownChoice c = host.Ask(ShutdownTrigger::DeepSleep);
-    asking_                = false;
-    LOG(SocReset, "[DEEPSLEEP] Recover: prompt closed, choice=%d (0=Cancel/wake, 5=Dismissed)\n",
-        static_cast<int>(c));
-    const bool resets = c == ShutdownChoice::SoftReset || c == ShutdownChoice::HardReset;
-    bool       pend   = false;
-    {
-        std::lock_guard<std::mutex> lk(resume_mtx_);
-        prompt_open_ = false;
-        if (c == ShutdownChoice::Cancel) pend = off_.load(std::memory_order_acquire);
-        if (resets) pend = asleep_.load(std::memory_order_acquire);
-        if (pend) {
-            choice_pending_ = true;
-            pending_choice_ = c;
-        }
-    }
-    if (c == ShutdownChoice::Dismissed) {
-        RePrompt();
-        return;
-    }
-    if (pend || c == ShutdownChoice::Cancel) return;
-    LOG(SocReset, "[DEEPSLEEP] Recover: choice=%d runs now\n", static_cast<int>(c));
-    emu_.Get<ShutdownAction>().Perform(c);
 }
 
 void GuestDeepSleep::PowerUpClockStop() {

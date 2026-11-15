@@ -17,7 +17,7 @@
 #include "sa1111_sac_tx_stream.h"
 #include "sa1111_sbi.h"
 #include "sa1111_system_controller.h"
-#include "../../host/audio_activity_widget.h"
+#include "../../host/audio_activity.h"
 #include <cerfcore/state/hibernation.h>
 #include <cerfcore/state/state_stream.h>
 
@@ -62,7 +62,7 @@ bool Sa1111Sac::ShouldRegister() {
 }
 
 void Sa1111Sac::OnUnitReady() {
-    emu_.Get<AudioActivityWidget>().NotePresent();
+    emu_.Get<AudioActivity>().NotePresent();
     stream_ = &emu_.Get<Sa1111SacTxStream>();
     frames_ = &emu_.Get<Sa1111SacFrameClock>();
     rx_     = &emu_.Get<Sa1111SacRxFifo>();

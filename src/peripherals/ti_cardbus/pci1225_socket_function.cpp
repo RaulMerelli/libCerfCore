@@ -56,14 +56,14 @@ constexpr uint32_t kZoomVideoCardLines = 0xFu << 22;
 
 }
 
-Pci1225SocketFunction::Pci1225SocketFunction(CerfEmulator& emu, uint8_t function, const char* slot_label,
+Pci1225SocketFunction::Pci1225SocketFunction(CerfEmulator& emu, uint8_t function, const ObjectIdentity& slot,
                                              Pci1225SharedConfig& shared, std::mutex& mtx,
                                              ExcaSocketSequencer& sequencer)
     : emu_(emu),
       shared_(shared),
       mtx_(mtx),
       sequencer_(sequencer),
-      slot_(emu, *this, slot_label),
+      slot_(emu, *this, slot),
       exca_(kExcaRules),
       config_(function, shared) {}
 

@@ -7,9 +7,8 @@
 #include <cerfcore/core/fatal.h>
 #include <cerfcore/core/log.h>
 #include <cerfcore/host/guest_deep_sleep.h>
-#include "../../core/steady_time.h"
-#include <cerfcore/host/host_widget.h>
-#include <cerfcore/host/host_widget_registry.h>
+#include <cerfcore/host/machine_indicators.h>
+#include <cerfcore/host/machine_object_tree.h>
 #include "../../execution/guest_cycle_clock.h"
 #include "../../peripherals/peripheral_dispatcher.h"
 #include <cerfcore/state/state_stream.h>
@@ -82,13 +81,10 @@ constexpr uint16_t kAstcPowerOn = 0x04B0u;
    VR4131 UM 19.2.5 p363). */
 constexpr uint16_t kIntLedint = 0x0001u;
 
-constexpr WidgetRgb kClrLit{78, 201, 90};
-constexpr WidgetRgb kClrDark{50, 55, 50};
-constexpr WidgetRgb kClrRim{90, 95, 90};
-constexpr WidgetRgb kClrRimBlink{120, 230, 130};
+constexpr ObjectRgb kLedColor{78, 201, 90};
 
 template <const std::string_view& Soc, uint32_t Base, Vr41xxRtcxDomain kClock>
-class Vr41xxLedBase : public Peripheral, public HostWidget {
+class Vr41xxLedBase : public Peripheral, public MachineLamp {
 public:
     using Peripheral::Peripheral;
 
@@ -98,21 +94,12 @@ public:
     }
     void OnReady() override {
         clock_ = &emu_.Get<GuestCycleClock>();
-        event_ = clock_->Add([this] {
-            std::lock_guard<std::mutex> lk(state_mutex_);
-            UpdateLocked();
-        });
+        event_ = clock_->Add([this] { Update(); });
         if constexpr (kClock == Vr41xxRtcxDomain::Peripheral) {
-            rtcx_.Attach([this] {
-                std::lock_guard<std::mutex> lk(state_mutex_);
-                UpdateLocked();
-            });
+            rtcx_.Attach([this] { Update(); });
         } else {
             rtcx_.Attach();
-            emu_.Get<GuestDeepSleep>().RegisterParkClock([this] {
-                std::lock_guard<std::mutex> lk(state_mutex_);
-                UpdateLocked();
-            });
+            emu_.Get<GuestDeepSleep>().RegisterParkClock([this] { Update(); });
         }
         clock_->RegisterRateListener([this] {
             std::lock_guard<std::mutex> lk(state_mutex_);
@@ -122,10 +109,15 @@ public:
         blink_.Anchor(rtcx_.Now(), 0u);
         second_ = emu_.TryGet<Vr41xxLedSecondElement>();
         emu_.Get<PeripheralDispatcher>().Register(this);
-        emu_.Get<HostWidgetRegistry>().Register(this);
+        auto& tree = emu_.Get<MachineObjectTree>();
+        tree.Add(this);
+        if (second_) tree.Add(second_, this);
         emu_.Get<GuestDeepSleep>().RegisterSleepEntryListener([this] {
-            std::lock_guard<std::mutex> lk(state_mutex_);
-            ApplyOtherResetLocked();
+            {
+                std::lock_guard<std::mutex> lk(state_mutex_);
+                ApplyOtherResetLocked();
+            }
+            Refresh();
         });
         emu_.Get<GuestCpuReset>().RegisterResetListener([this](ResetLineKind kind) {
             if (emu_.Get<GuestCpuReset>().DeliveredResetWasResume()) return;
@@ -161,30 +153,11 @@ public:
         }
     }
     void WriteHalf(uint32_t addr, uint16_t value) override {
-        std::lock_guard<std::mutex> lk(state_mutex_);
-        EvaluateLocked();
-        switch (addr - Base) {
-            case kOffHts:
-                hts_ = static_cast<uint16_t>(value & kHtsWritable);
-                NoteTimeChangeLocked("LEDHTSREG", value);
-                break;
-            case kOffLts:
-                lts_ = static_cast<uint16_t>(value & kLtsWritable);
-                NoteTimeChangeLocked("LEDLTSREG", value);
-                break;
-            case kOffHltcl:
-            case kOffHltch:
-                break;
-            case kOffCnt:
-                WriteCntLocked(static_cast<uint16_t>(value & kCntMask));
-                break;
-            case kOffAstc: WriteAstcLocked(value); break;
-            case kOffInt:
-                int_ = static_cast<uint16_t>(int_ & ~(value & kIntLedint));
-                break;
-            default: HaltUnsupportedAccess("LED WriteHalf", addr, value);
+        {
+            std::lock_guard<std::mutex> lk(state_mutex_);
+            WriteHalfLocked(addr, value);
         }
-        UpdateLocked();
+        Refresh();
     }
     void WriteByte(uint32_t addr, uint8_t value) override {
         HaltUnsupportedAccess("LED WriteByte", addr, value);
@@ -225,48 +198,53 @@ public:
         UpdateLocked();
     }
 
-    std::string WidgetName() const override { return second_ ? second_->PackageName() : "Notification LED"; }
-    WidgetGroup Group() const override { return WidgetGroup::Indicator; }
-    std::string Tooltip() const override {
+    std::string ObjectId() const override { return "notification_led"; }
+    static constexpr char kObjectName[] = "Notification LED";
+    std::string ObjectName() const override { return second_ ? second_->PackageName() : kObjectName; }
+    LampState   Lamp() const override {
         uint16_t cnt, hts, lts;
         { std::lock_guard<std::mutex> lk(state_mutex_); cnt = cnt_; hts = hts_; lts = lts_; }
-        char buf[96];
-        if (cnt & kCntEnable)
-            std::snprintf(buf, sizeof(buf), "Notification LED: blinking (on %ums / off %ums)",
-                          static_cast<unsigned>(hts) * 125u / 2u,
-                          static_cast<unsigned>(lts) * 125u / 2u);
-        else
-            std::snprintf(buf, sizeof(buf), "Notification LED: off");
-        if (!second_) return buf;
-        return std::string(buf) + "\n" + second_->ElementName() + (second_->Lit() ? ": on" : ": off");
-    }
-    WidgetIcon Icon() const override {
-        constexpr int kR = 5;
-        return LedIcon{Fill(), draw_blink_ ? kClrRimBlink : kClrRim, kR};
-    }
-    bool PollDirty() override {
-        uint16_t cnt, hts, lts;
-        { std::lock_guard<std::mutex> lk(state_mutex_); cnt = cnt_; hts = hts_; lts = lts_; }
-        const bool blink = (cnt & kCntEnable) != 0u;
-        const bool lit   = blink && (HostSteadyMicros() / 1000u * kUnitsPerHostSecond / 1000u) %
-                                        (static_cast<uint64_t>(hts) + lts) < hts;
-        const bool second_lit = second_ && second_->Lit();
-        if (lit == draw_lit_ && blink == draw_blink_ && second_lit == draw_second_lit_) return false;
-        draw_lit_        = lit;
-        draw_blink_      = blink;
-        draw_second_lit_ = second_lit;
-        return true;
+        if ((cnt & kCntEnable) == 0u) return LampState{false, false, kLedColor};
+        return LampState{true, true, kLedColor, UnitsToMs(hts), UnitsToMs(lts)};
     }
 
 private:
-    static uint8_t AddChannel(uint8_t a, uint8_t b) {
-        return static_cast<uint8_t>(std::min(255, static_cast<int>(a) + b));
+    static uint32_t UnitsToMs(uint16_t units) {
+        return static_cast<uint32_t>((units * 1000u + kUnitsPerHostSecond / 2u) / kUnitsPerHostSecond);
     }
-    WidgetRgb Fill() const {
-        if (!draw_second_lit_) return draw_lit_ ? kClrLit : kClrDark;
-        const WidgetRgb second = second_->LitColor();
-        if (!draw_lit_) return second;
-        return {AddChannel(kClrLit.r, second.r), AddChannel(kClrLit.g, second.g), AddChannel(kClrLit.b, second.b)};
+
+    void Update() {
+        {
+            std::lock_guard<std::mutex> lk(state_mutex_);
+            UpdateLocked();
+        }
+        Refresh();
+    }
+
+    void WriteHalfLocked(uint32_t addr, uint16_t value) {
+        EvaluateLocked();
+        switch (addr - Base) {
+            case kOffHts:
+                hts_ = static_cast<uint16_t>(value & kHtsWritable);
+                NoteTimeChangeLocked("LEDHTSREG", value);
+                break;
+            case kOffLts:
+                lts_ = static_cast<uint16_t>(value & kLtsWritable);
+                NoteTimeChangeLocked("LEDLTSREG", value);
+                break;
+            case kOffHltcl:
+            case kOffHltch:
+                break;
+            case kOffCnt:
+                WriteCntLocked(static_cast<uint16_t>(value & kCntMask));
+                break;
+            case kOffAstc: WriteAstcLocked(value); break;
+            case kOffInt:
+                int_ = static_cast<uint16_t>(int_ & ~(value & kIntLedint));
+                break;
+            default: HaltUnsupportedAccess("LED WriteHalf", addr, value);
+        }
+        UpdateLocked();
     }
 
     uint64_t BlinkTicksLocked() { return blink_.CountAt(rtcx_.Now()); }
@@ -391,10 +369,6 @@ private:
     WideTickAnchoredCounter blink_;
 
     Vr41xxLedSecondElement* second_ = nullptr;
-
-    bool draw_lit_        = false;
-    bool draw_blink_      = false;
-    bool draw_second_lit_ = false;
 };
 
 }  /* namespace cerf_vr41xx_led_detail */

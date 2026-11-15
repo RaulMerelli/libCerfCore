@@ -1,7 +1,7 @@
 #include "siemens_simpad_battery.h"
 
 #include <cerfcore/core/cerf_emulator.h>
-#include <cerfcore/host/host_widget_registry.h>
+#include <cerfcore/host/machine_object_tree.h>
 #include <cerfcore/boards/board_context.h>
 #include "siemens_simpad_family_id.h"
 
@@ -13,7 +13,7 @@ bool SiemensSimpadBattery::ShouldRegister() {
 }
 
 void SiemensSimpadBattery::OnReady() {
-    emu_.Get<HostWidgetRegistry>().Register(&battery_);
+    emu_.Get<MachineObjectTree>().Add(&battery_);
 }
 
 REGISTER_SERVICE(SiemensSimpadBattery);

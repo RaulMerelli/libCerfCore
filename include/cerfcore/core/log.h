@@ -47,7 +47,8 @@ namespace Log {
         X(GuestDriver, "GUEST",       "CERF guest driver runtime output via cerf_debug_tx") \
         X(GuestAdditions, "GUEST_HOST", "CERF guest additions")                          \
         X(Discord,     "DISCORD",     "Discord Rich Presence")                      \
-        X(Manager,     "MANAGER",     "virtual machine manager")
+        X(Manager,     "MANAGER",     "virtual machine manager")                    \
+        X(Machine,     "MACHINE",     "machine objects")
 
     enum class Cat : uint8_t {
     #define X(name, slug, desc) name,
@@ -93,6 +94,7 @@ namespace Log {
         | CatBit(Cat::SocReset)
         | CatBit(Cat::Discord)
         | CatBit(Cat::Manager)
+        | CatBit(Cat::Machine)
         | CatBit(Cat::GuestAdditions)
         | CatBit(Cat::Nkdbg);
 

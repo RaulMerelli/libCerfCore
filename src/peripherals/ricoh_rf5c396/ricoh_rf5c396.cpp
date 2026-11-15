@@ -19,6 +19,11 @@ constexpr uint8_t kDataBit7         = 0x80u;
 
 constexpr bool kUndrivenIrqNetLevel = true;
 
+constexpr char kSlot1Id[]    = "pc_card_slot_1";
+constexpr char kSlot1Label[] = "PCMCIA #1";
+constexpr char kSlot2Id[]    = "pc_card_slot_2";
+constexpr char kSlot2Label[] = "PCMCIA #2";
+
 constexpr ExcaPartRules kExcaRules = [] {
     ExcaPartRules rules{};
     rules.ready_change_any_edge = false;
@@ -66,7 +71,7 @@ bool RicohRf5c396::ShouldRegister() {
 
 void RicohRf5c396::OnReady() {
     board_ = &emu_.Get<RicohRf5c396Board>();
-    StartSockets("PCMCIA #1", "PCMCIA #2");
+    StartSockets({kSlot1Id, kSlot1Label}, ObjectIdentity{kSlot2Id, kSlot2Label});
 }
 
 void RicohRf5c396::ResetChipLocked() {

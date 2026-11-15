@@ -76,10 +76,11 @@ public:
         emu_.Get<KeyboardRouter>().Register(this);
     }
 
-    std::string    SourceName() const override { return "Guest Additions keyboard"; }
+    static constexpr char kSourceName[] = "Guest Additions keyboard";
+    std::string    SourceId() const override { return "guest_additions_keyboard"; }
+    std::string    SourceName() const override { return kSourceName; }
     bool           Stock() const override { return false; }
     int            SourcePriority() const override { return 100; }
-    const char*    IconResourceName() const override { return "ga_keyboard"; }
 
     bool SourceReady() const override {
         return emu_.Get<CerfGuestLiveness>().IsAlive();

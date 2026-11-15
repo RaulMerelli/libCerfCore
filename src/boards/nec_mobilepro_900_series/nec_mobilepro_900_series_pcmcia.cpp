@@ -1,7 +1,7 @@
 #include "nec_mobilepro_900_series_pcmcia.h"
 
 #include <cerfcore/core/cerf_emulator.h>
-#include <cerfcore/host/host_widget_registry.h>
+#include <cerfcore/host/machine_object_tree.h>
 #include <cerfcore/socs/guest_cpu_reset.h>
 #include "../../peripherals/pcmcia/pcmcia_auto_insert.h"
 #include "../../peripherals/pcmcia/pcmcia_space_router.h"
@@ -13,6 +13,11 @@ namespace cerfcore {
 
 namespace {
 
+constexpr char kCfSlotId[]        = "cf_slot";
+constexpr char kCfSlotLabel[]     = "CompactFlash slot";
+constexpr char kPcCardSlotId[]    = "pc_card_slot";
+constexpr char kPcCardSlotLabel[] = "PC Card slot";
+
 /* Per-socket GPIO (Linux jlime_v2.6.34-hpc_mp900.c mp900_pin_config[]). */
 constexpr uint32_t kGpioNcd    [2] = { 11u, 13u };  /* nCD,  socket 0 CF / 1 PC */
 constexpr uint32_t kGpioPrdy   [2] = {  5u,  7u };  /* PRDY (ready), idles high  */
@@ -22,8 +27,8 @@ constexpr uint32_t kGpioCardIrq[2] = { 75u, 76u };  /* card IREQ, active-low    
 
 NecMobilepro900SeriesPcmcia::NecMobilepro900SeriesPcmcia(CerfEmulator& emu)
     : Service(emu),
-      slot0_(emu, *this, "CompactFlash slot"),
-      slot1_(emu, *this, "PC Card slot") {}
+      slot0_(emu, *this, {kCfSlotId, kCfSlotLabel}),
+      slot1_(emu, *this, {kPcCardSlotId, kPcCardSlotLabel}) {}
 
 bool NecMobilepro900SeriesPcmcia::ShouldRegister() {
     return emu_.Get<BoardContext>().GetBoardFamilyId() == BoardFamilyId::NecMobilepro900Series;
@@ -31,9 +36,9 @@ bool NecMobilepro900SeriesPcmcia::ShouldRegister() {
 
 void NecMobilepro900SeriesPcmcia::OnReady() {
     emu_.Get<PcmciaSpaceRouter>().ProvideSockets(&slot0_, &slot1_);
-    auto& widgets = emu_.Get<HostWidgetRegistry>();
-    widgets.Register(&slot0_);
-    widgets.Register(&slot1_);
+    auto& tree = emu_.Get<MachineObjectTree>();
+    tree.Add(&slot0_);
+    tree.Add(&slot1_);
 
     auto& gpio = emu_.Get<Pxa255Gpio>();
     for (int s = 0; s < 2; ++s) {

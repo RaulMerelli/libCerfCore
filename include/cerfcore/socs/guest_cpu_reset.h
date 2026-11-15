@@ -38,8 +38,8 @@ public:
     /* OnReady-time only; at most one latch per emulator instance. */
     void SetCauseLatch(ResetCauseLatch* latch);
 
-    /* Any thread. Host soft reset: RAM survives the reset. */
     void WarmReset();
+    void WarmResetFromHost();
 
     void ColdReset();
 

@@ -3,7 +3,7 @@
 #include <cerfcore/boards/board_context.h>
 #include <cerfcore/core/cerf_emulator.h>
 #include <cerfcore/core/fatal.h>
-#include <cerfcore/host/host_widget_registry.h>
+#include <cerfcore/host/machine_object_tree.h>
 #include <cerfcore/socs/guest_cpu_reset.h>
 #include <cerfcore/state/state_stream.h>
 #include "../../boards/hp_600/hp_600_family_id.h"
@@ -79,7 +79,7 @@ constexpr uint32_t kCardA25        = 0x02000000u;
 }
 
 Hd64461Pcc::Hd64461Pcc(CerfEmulator& emu)
-    : RegWindow(emu), slot0_(emu, *this, std::string()), slot1_(emu, *this, std::string()),
+    : RegWindow(emu), slot0_(emu, *this, ObjectIdentity{}), slot1_(emu, *this, ObjectIdentity{}),
       slots_{&slot0_, &slot1_} {}
 
 bool Hd64461Pcc::ShouldRegister() {
@@ -91,10 +91,10 @@ void Hd64461Pcc::OnReady() {
     gpio_         = &emu_.Get<Hd64461Gpio>();
     wiring_       = &emu_.Get<Hd64461SocketWiring>();
     system_       = &emu_.Get<Hd64461SystemControl>();
-    auto& widgets = emu_.Get<HostWidgetRegistry>();
+    auto& tree = emu_.Get<MachineObjectTree>();
     for (uint32_t ch = 0; ch < kChannels; ++ch) {
-        slots_[ch]->SetLabel(wiring_->SocketLabel(ch));
-        widgets.Register(slots_[ch]);
+        slots_[ch]->SetIdentity(wiring_->Socket(ch));
+        tree.Add(slots_[ch]);
     }
     RegWindow::OnReady();
     ApplySocketDrive();

@@ -111,7 +111,7 @@ bool CerfVirtGradientFiller::FillIndexed(const CerfGradDescriptor& g, uint32_t d
                         x, y, g.dst.buffer, g.dst.is_fb_pa, g.dst.stage_off, g.dst.stage_len);
         }
     }
-    fb_->MarkDirty();
+    fb_->MarkWritten(dst.host_base);
     return true;
 }
 
@@ -184,7 +184,7 @@ bool CerfVirtGradientFiller::Execute(const CerfGradDescriptor& g) {
             else              WriteStraddlePixel(dst, x, y, d_bpp, px);
         }
     }
-    fb_->MarkDirty();
+    fb_->MarkWritten(dst.host_base);
     return true;
 }
 

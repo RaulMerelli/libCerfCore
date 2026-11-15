@@ -6,6 +6,7 @@
 
 #include "../pcmcia/pcmcia_slot.h"
 #include <cerfcore/core/cerf_emulator.h>
+#include "../../core/deferred_jobs.h"
 #include <cerfcore/state/emulation_freeze.h>
 #include <cerfcore/state/state_stream.h>
 
@@ -24,10 +25,9 @@ SerialPcCard::SerialPcCard(CerfEmulator& emu, std::string host_com_port)
       host_port_(std::move(host_com_port)) { BuildCis(); }
 SerialPcCard::~SerialPcCard() = default;
 
-std::string SerialPcCard::TooltipDetail() const {
-    if (mode_ == Mode::HostForward)
-        return std::string(kForwardDisplayName) + " → host " + host_port_;
-    return kDisplayName;
+CardFacts SerialPcCard::Facts() const {
+    if (mode_ == Mode::HostForward) return SerialLinkFacts{host_port_};
+    return NoCardFacts{};
 }
 
 void SerialPcCard::BuildCis() {
@@ -59,13 +59,16 @@ void SerialPcCard::BuildCis() {
 void SerialPcCard::OnInserted() {
     if (mode_ == Mode::HostForward) {
         auto fwd = std::make_unique<HostSerialForward>(host_port_, emu_);
-        PcmciaSlot* slot = slot_;
-        const uint64_t id = card_id_;
-        fwd->SetOnBridgeDead([slot, id] { slot->EjectCardIfResident(id); });
+        PcmciaSlot*    slot = slot_;
+        const uint64_t id   = card_id_;
+        DeferredJobs&  jobs = emu_.Get<DeferredJobs>();
+        fwd->SetOnBridgeDead([slot, id, &jobs](const char* reason, uint32_t code) {
+            jobs.Post([slot, id, reason, code] { slot->ReportCardFailure(id, reason, code); });
+        });
         endpoint_ = std::move(fwd);
     } else {
         endpoint_ = std::make_unique<ModemPersonality>(
-            emu_, "ppp:" + slot_->WidgetName());
+            emu_, "ppp:" + slot_->ObjectId());
     }
     /* OUT2 drives the card's tri-state buffer onto the socket IRQ line, so the card
        raises no interrupt until the driver sets it. That gate is this card's wiring,
@@ -77,7 +80,7 @@ void SerialPcCard::OnInserted() {
                             /*irq_gate_mcr=*/0x08u,
                             0u},
         Serial16550::Clock{1843200u, 1u}, *this);
-    uart_->Port().SetActivityWidget(slot_);
+    uart_->Port().SetActivityObject(slot_);
     endpoint_->BindUart(*uart_);
     uart_->SetEndpoint(endpoint_.get());
 }
@@ -86,6 +89,10 @@ void SerialPcCard::OnShutdown() {
     DriveIrqLineLow();
     if (uart_) uart_->SetEndpoint(nullptr);
     endpoint_.reset();
+}
+
+void SerialPcCard::StopHostIo() {
+    if (endpoint_) endpoint_->StopHostIo();
 }
 
 void SerialPcCard::OnSlotTimer() { uart_->Port().OnTimer(); }

@@ -4,7 +4,7 @@
 #include <cerfcore/boards/board_context.h>
 #include "../../boards/hp_jornada_700/hp_jornada_700_family_id.h"
 #include <cerfcore/cpu/emulated_memory.h>
-#include "../../host/audio_activity_widget.h"
+#include "../../host/audio_activity.h"
 #include "sa1111_sac_host_output.h"
 #include "sa1111_sac_request_lines.h"
 #include "sa1111_sac_tx_stream.h"
@@ -78,7 +78,7 @@ void Sa1111SacDma::OnBlockStart(uint64_t at, bool buffer_b) {
 }
 
 void Sa1111SacDma::OnBlockDone() {
-    emu_.Get<AudioActivityWidget>().MarkTx();
+    emu_.Get<AudioActivity>().MarkTx();
 }
 
 /* SA-1111 Developer's Manual §7.2.2 (printed 7-5): the DMA can "loop continuously on a block-data

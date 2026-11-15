@@ -18,7 +18,7 @@
 #include <cerfcore/host/notification_stack.h>
 #include <cerfcore/host/guest_deep_sleep.h>
 #include <cerfcore/boot/guest_cold_boot.h>
-#include <cerfcore/host/host_widget_registry.h>
+#include <cerfcore/host/machine_object_tree.h>
 #include <cerfcore/peripherals/cerf_virt/cerf_virt_customizations_reset.h>
 #include <cerfcore/socs/guest_cpu_reset.h>
 #include <cerfcore/host/hw_screen.h>
@@ -41,6 +41,20 @@ namespace {
 constexpr std::chrono::seconds kRefusedCardTimeout{10};
 constexpr std::chrono::seconds kRamOnlyCardTimeout{5};
 
+constexpr char kBusyText[]             = "A save or a load is already running";
+constexpr char kSavingText[]           = "Saving the machine state…";
+constexpr char kSaveFailedFormat[]     = "Failed to save the machine state\n%s";
+constexpr char kLoadingText[]          = "Loading the machine state…";
+constexpr char kUnableToResumeFormat[] = "Unable to resume\n%s";
+constexpr char kRamOnlyText[]          = "Resuming RAM only\nCold reset a device if it's broken";
+
+std::string WithDetail(const char* format, const std::string& detail) {
+    const int length = std::snprintf(nullptr, 0, format, detail.c_str());
+    std::string text(static_cast<size_t>(length), '\0');
+    std::snprintf(text.data(), text.size() + 1, format, detail.c_str());
+    return text;
+}
+
 }
 
 REGISTER_SERVICE(Hibernation);
@@ -51,6 +65,10 @@ Hibernation::~Hibernation() {
 
 void Hibernation::JoinWorker() {
     if (worker_.joinable()) worker_.join();
+}
+
+void Hibernation::RegisterSavedListener(std::function<void(const std::string& path)> fn) {
+    saved_listeners_.Add(std::move(fn));
 }
 
 void Hibernation::RegisterPreSaveListener(std::function<void()> fn) {
@@ -67,7 +85,7 @@ void Hibernation::RegisterRomImage(uint64_t bytes) {
 
 bool Hibernation::ClaimWorker() {
     if (busy_.exchange(true, std::memory_order_acq_rel)) {
-        emu_.Get<NotificationStack>().PostError("A save or a load is already running");
+        emu_.Get<NotificationStack>().PostError(kBusyText);
         return false;
     }
     JoinWorker();
@@ -186,7 +204,7 @@ void Hibernation::SaveSection(StateWriter& w, StateSection section) {
             w.Write<uint32_t>("surface_height", presentation.SurfaceHeight());
             break;
         }
-        case StateSection::Widget: emu_.Get<HostWidgetRegistry>().SaveState(w); break;
+        case StateSection::Objects: emu_.Get<MachineObjectTree>().SaveState(w); break;
         case StateSection::Reset:
             emu_.Get<GuestCpuReset>().SaveState(w);
             emu_.Get<GuestColdBoot>().SaveState(w);
@@ -201,8 +219,7 @@ bool Hibernation::Save(const std::string& path_in) {
     auto& pause = emu_.Get<EmulationPause>();
     auto& stack = emu_.Get<NotificationStack>();
 
-    stack.Show(NotificationId::SavingState, NotificationKind::Warning,
-               "Saving the machine state…");
+    stack.Show(NotificationId::SavingState, NotificationKind::Warning, kSavingText);
     Progress("Saving state...");
     Progress("Saving RAM (%llu MB)...", static_cast<unsigned long long>(
         emu_.Get<EmulatedMemory>().VolatileByteCount() >> 20));
@@ -225,12 +242,10 @@ bool Hibernation::Save(const std::string& path_in) {
         Progress("State saved.");
     } else {
         Progress("Save FAILED: %s", error.c_str());
-        stack.PostError("Failed to save the machine state\n" + error);
+        stack.PostError(WithDetail(kSaveFailedFormat, error));
     }
 
-    if (ok) {
-        emu_.Get<HostPresentation>().SaveScreenshot(DeviceDirFile(kSavedStateScreenshotFile));
-    }
+    if (ok) saved_listeners_.Call(path);
     return ok;
 }
 
@@ -332,7 +347,7 @@ void Hibernation::RestoreSection(StateReader& r, StateSection section) {
         case StateSection::Flash:  emu_.Get<EmulatedMemory>().RestoreFlashRegions(r); break;
         case StateSection::Periph: RestorePeripherals(r); break;
         case StateSection::Presentation: RestorePresentation(r); break;
-        case StateSection::Widget: emu_.Get<HostWidgetRegistry>().RestoreState(r); break;
+        case StateSection::Objects: emu_.Get<MachineObjectTree>().RestoreState(r); break;
         case StateSection::Reset:
             emu_.Get<GuestCpuReset>().RestoreState(r);
             emu_.Get<GuestColdBoot>().RestoreState(r);
@@ -358,8 +373,7 @@ bool Hibernation::Restore(const std::string& path_in, bool ram_only) {
     const std::string path = path_in.empty() ? DefaultStatePath() : path_in;
     auto& stack = emu_.Get<NotificationStack>();
 
-    stack.Show(NotificationId::LoadingState, NotificationKind::Warning,
-               "Loading the machine state…");
+    stack.Show(NotificationId::LoadingState, NotificationKind::Warning, kLoadingText);
     Progress(ram_only ? "Warm boot: restoring RAM..." : "Restoring state...");
 
     std::string reason;
@@ -367,10 +381,9 @@ bool Hibernation::Restore(const std::string& path_in, bool ram_only) {
 
     stack.Close(NotificationId::LoadingState);
     if (outcome == RestoreOutcome::Refused)
-        stack.Post(NotificationKind::Error, "Unable to resume\n" + reason, kRefusedCardTimeout);
+        stack.Post(NotificationKind::Error, WithDetail(kUnableToResumeFormat, reason), kRefusedCardTimeout);
     if (outcome == RestoreOutcome::MemoryAfterRefusal)
-        stack.Post(NotificationKind::Warning, "Resuming RAM only\nCold reset a device if it's broken",
-                   kRamOnlyCardTimeout);
+        stack.Post(NotificationKind::Warning, kRamOnlyText, kRamOnlyCardTimeout);
     return outcome != RestoreOutcome::Refused;
 }
 
@@ -427,6 +440,7 @@ Hibernation::RestoreOutcome Hibernation::ApplyStateFile(const std::string& path,
     host_platform::DeleteHostFile(rollback, ignored);
     emu_.Get<EngineBridge>().Guest().FlushTranslationCache();
     snap.unlock();
+    emu_.Get<MachineObjectTree>().RefreshAll();
 
     if (outcome == RestoreOutcome::MemoryOnly || outcome == RestoreOutcome::MemoryAfterRefusal)
         emu_.Get<JitRunner>().DeliverHeldReset();

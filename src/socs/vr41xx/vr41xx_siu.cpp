@@ -42,8 +42,8 @@ void Vr41xxSiu::OnReady() {
         Port().NotifyControlLines();
     });
 
-    Port().AttachCradle(emu_, modem_->label);
-    LOG(Periph, "[UART] SIU attached as serial endpoint line '%s'\n", modem_->label.c_str());
+    Port().AttachCradle(emu_, modem_->port);
+    LOG(Periph, "[UART] SIU attached as serial endpoint line '%s'\n", modem_->port.name.c_str());
 }
 
 void Vr41xxSiu::SetModemInputs(bool cts, bool dsr, bool, bool dcd) {

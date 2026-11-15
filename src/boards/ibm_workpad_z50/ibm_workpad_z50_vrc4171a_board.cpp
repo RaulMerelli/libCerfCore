@@ -12,6 +12,8 @@ namespace cerfcore {
 
 namespace {
 
+constexpr char kSlotALabel[] = "PC Card";
+
 constexpr uint32_t kIsaIoBase        = 0x14000000u;
 constexpr uint32_t kIsaMemBase       = 0x10000000u;
 constexpr uint16_t kSlotBCompactFlash = 0x8000u;
@@ -29,7 +31,7 @@ public:
     uint32_t IsaIoBase() const override { return kIsaIoBase; }
     uint32_t IsaMemBase() const override { return kIsaMemBase; }
     uint16_t SlotBConfiguration() const override { return kSlotBCompactFlash; }
-    std::string SlotALabel() const override { return "PC Card"; }
+    std::string SlotALabel() const override { return kSlotALabel; }
     bool     SensePullupsOnCardVcc(int bank) const override { return bank == kCompactFlashBank; }
 
     void SetIrqLevel(bool active) override {

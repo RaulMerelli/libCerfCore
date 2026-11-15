@@ -5,7 +5,7 @@
 #include <cerfcore/core/fatal.h>
 #include <cerfcore/core/instance_threads.h>
 #include <cerfcore/cpu/emulated_memory.h>
-#include "../../host/audio_activity_widget.h"
+#include "../../host/audio_activity.h"
 #include <cerfengine/mips/mips_mmu.h>
 #include "casio_jx670_family_id.h"
 
@@ -20,8 +20,8 @@ bool CasioJx670Speaker::ShouldRegister() {
 
 void CasioJx670Speaker::OnReady() {
     mem_      = &emu_.Get<EmulatedMemory>();
-    activity_ = &emu_.Get<AudioActivityWidget>();
-    paced_.Start(emu_.Get<Fatal>(), emu_.Get<InstanceThreads>(), "Em500Audio", 0, 0, 0);
+    activity_ = &emu_.Get<AudioActivity>();
+    paced_.Start(emu_.Get<Fatal>(), emu_.Get<InstanceThreads>(), emu_.TryGet<AudioOutputs>(), "Em500Audio", 0, 0, 0);
     activity_->NotePresent();
 }
 

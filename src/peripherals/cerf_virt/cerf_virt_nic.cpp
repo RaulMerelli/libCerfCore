@@ -5,7 +5,7 @@
 #include <cerfcore/peripherals/peripheral_base.h>
 #include "../peripheral_dispatcher.h"
 #include <cerfcore/boards/board_context.h>
-#include "../../host/guest_additions_widget.h"
+#include "guest_additions_device.h"
 #include <cerfcore/core/byte_order.h>
 #include <cerfcore/core/cerf_emulator.h>
 #include <cerfcore/core/device_config.h>
@@ -120,7 +120,7 @@ public:
                 CollectTxLocked(value, batch);
             }
             NetworkBackend& net = emu_.Get<NetworkBackend>();
-            if (!batch.empty()) emu_.Get<GuestAdditionsWidget>().MarkTx();
+            if (!batch.empty()) emu_.Get<GuestAdditionsDevice>().MarkTx();
             for (auto& f : batch) net.SendFrame(f.data(), f.size());
             break;
         }
@@ -210,7 +210,7 @@ private:
 
         rx_write_seq_.store(write_seq + 1u, std::memory_order_release);
 
-        emu_.Get<GuestAdditionsWidget>().MarkRx();
+        emu_.Get<GuestAdditionsDevice>().MarkRx();
     }
 
     std::mutex mu_;

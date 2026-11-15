@@ -1,7 +1,7 @@
 #pragma once
 
 #include <cerfcore/core/service.h>
-#include "../../platform/wave_in_fifo.h"
+#include "../../host/wave_in_fifo.h"
 
 #include <cstdint>
 

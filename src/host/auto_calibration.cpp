@@ -1,5 +1,6 @@
 #include <cerfcore/host/auto_calibration.h>
 
+#include "calibration_frame_source.h"
 #include "calibration_run.h"
 
 #include <cerfcore/core/cerf_emulator.h>
@@ -8,15 +9,9 @@
 #include <cerfcore/core/log.h>
 #include <cerfcore/core/user_config_writer.h>
 #include <cerfcore/host/host_presentation.h>
-#include <cerfcore/host/notification_stack.h>
-#include <cerfcore/host/user_alert.h>
-#include <cerfcore/host/pointer_input.h>
-#include <cerfcore/host/pointer_router.h>
-#include <cerfcore/host/pointer_source.h>
 #include <cerfcore/peripherals/cerf_virt/cerf_virt_config_apply.h>
 #include <cerfcore/socs/guest_cpu_reset.h>
 #include <cerfcore/state/state_boot_gate.h>
-#include <cerfcore/state/state_stream.h>
 
 #include <utility>
 
@@ -30,37 +25,20 @@ constexpr std::chrono::seconds kWindowLength{60};
 constexpr Ms                   kTickInterval{500};
 constexpr uint32_t             kResolutionDrift = 50;
 
-constexpr char kTitle[]          = "Screen calibration";
-constexpr char kAttemptMessage[] = "Calibrate the screen for you?";
-constexpr char kResolutionMessage[] =
-    "You need a stock resolution to pass the calibration screen. Switch and soft reset now?";
-constexpr char kFailureText[] = "Automatic calibration was unable to find the calibration data on screen";
-constexpr char kFinishedText[] = "Calibration attempt finished";
-constexpr std::chrono::seconds kFinishedCardTimeout{5};
-
 }
 
 REGISTER_SERVICE(AutoCalibration);
 
 void AutoCalibration::OnReady() {
     host_          = &emu_.Get<CalibrationHost>();
+    frames_        = &emu_.Get<CalibrationFrameSource>();
     presentation_  = &emu_.Get<HostPresentation>();
     config_        = &emu_.Get<DeviceConfig>();
     threads_       = &emu_.Get<InstanceThreads>();
-    alert_         = &emu_.Get<UserAlert>();
-    notifications_ = &emu_.Get<NotificationStack>();
     run_           = emu_.TryGet<CalibrationRun>();
     panel_         = emu_.Get<BoardDatabase>().FindBoard(config_->board_id)->lcd_panel_size;
     emu_.Get<GuestCpuReset>().RegisterResetListener([this](ResetLineKind) {
         if (emu_.Get<GuestCpuReset>().DeliveredResetWasResume()) return;
-        bool shown = false;
-        {
-            std::lock_guard<std::mutex> lock(ga_mutex_);
-            shown           = ga_shown_;
-            ga_shown_       = false;
-            stock_switched_ = false;
-        }
-        if (shown) host_->EndFallback(false);
         BeginWindow();
     });
     emu_.Get<StateBootGate>().RegisterColdStartListener([this] { BeginWindow(); });
@@ -80,86 +58,8 @@ void AutoCalibration::OnShutdown() {
 
 bool AutoCalibration::CanPress() const { return run_ != nullptr; }
 
-bool AutoCalibration::GuestAdditionsCalibrationShown() const {
-    std::lock_guard<std::mutex> lock(ga_mutex_);
-    return ga_shown_;
-}
-
-void AutoCalibration::OnGuestAdditionsCalibration(bool shown) {
-    if (!shown) {
-        bool switched_back = false;
-        {
-            std::lock_guard<std::mutex> lock(ga_mutex_);
-            if (!ga_shown_) return;
-            ga_shown_ = false;
-            LOG(GuestAdditions, "[CALIB] guest calibration window disappeared\n");
-            if (stock_switched_) switched_back = SwitchBackLocked();
-        }
-        host_->EndFallback(switched_back);
-        return;
-    }
-    {
-        std::lock_guard<std::mutex> lock(ga_mutex_);
-        if (ga_shown_) return;
-        ga_shown_ = true;
-    }
-    LOG(GuestAdditions, "[CALIB] guest calibration window appeared\n");
-    if (!run_ || !config_->automatic_calibration) {
-        ShowFallback();
-        return;
-    }
-    Request(CalibrationTrigger::kGuestAdditions);
-}
-
-void AutoCalibration::SwitchToStockPointer() {
-    std::lock_guard<std::mutex> lock(ga_mutex_);
-    if (!ga_shown_) {
-        LOG(GuestAdditions, "[CALIB] the guest calibration window already closed, the pointer source stays\n");
-        return;
-    }
-    auto&                       router = emu_.Get<PointerRouter>();
-    const PointerSource*        guest  = &emu_.Get<PointerInput>();
-    for (PointerSource* source : router.Sources()) {
-        if (source == guest) continue;
-        router.SetActive(source);
-        stock_switched_ = true;
-        LOG(GuestAdditions, "[CALIB] switched to stock input on user request\n");
-        return;
-    }
-    LOG(Caution, "[CALIB] no stock pointing device to switch to\n");
-}
-
-bool AutoCalibration::SwitchBackLocked() {
-    stock_switched_ = false;
-    auto& router    = emu_.Get<PointerRouter>();
-    router.RearmAutoSelect();
-    if (router.Active() != &emu_.Get<PointerInput>()) {
-        LOG(GuestAdditions, "[CALIB] calibration over; the Guest Additions pointer is not ready, keeping the stock "
-                            "device\n");
-        return false;
-    }
-    LOG(GuestAdditions, "[CALIB] switched back to the Guest Additions pointer\n");
-    return true;
-}
-
-void AutoCalibration::SaveGuestAdditionsState(StateWriter& w) const {
-    std::lock_guard<std::mutex> lock(ga_mutex_);
-    w.Write<uint8_t>("calibration_window_shown", ga_shown_ ? 1u : 0u);
-    w.Write<uint8_t>("calibration_stock_pointer", stock_switched_ ? 1u : 0u);
-}
-
-void AutoCalibration::RestoreGuestAdditionsState(StateReader& r) {
-    uint8_t shown = 0, stock = 0;
-    r.Read("calibration_window_shown", shown);
-    r.Read("calibration_stock_pointer", stock);
-    bool ended = false;
-    {
-        std::lock_guard<std::mutex> lock(ga_mutex_);
-        ended           = ga_shown_ && shown == 0;
-        ga_shown_       = shown != 0;
-        stock_switched_ = stock != 0;
-    }
-    if (ended) host_->EndFallback(false);
+void AutoCalibration::RegisterFailureListener(std::function<void(CalibrationTrigger)> listener) {
+    failure_listeners_.Add(std::move(listener));
 }
 
 void AutoCalibration::Request(CalibrationTrigger trigger) {
@@ -247,7 +147,7 @@ void AutoCalibration::Loop() {
 
 void AutoCalibration::Tick() {
     CalibrationFrame frame;
-    if (host_->CaptureSurface(frame) != FrameGrab::kCaptured) return;
+    if (!frames_->Grab(frame)) return;
     if (frame == last_tick_frame_) return;
     CalibrationCross      cross;
     const CrossScanStatus status = scan_.Find(frame, cross);
@@ -274,12 +174,10 @@ void AutoCalibration::Explicit(CalibrationTrigger trigger) {
     CalibrationFrame frame;
     CalibrationCross cross;
     CrossScanStatus  status = CrossScanStatus::kNone;
-    switch (host_->CaptureSurface(frame)) {
-        case FrameGrab::kCaptured: status = scan_.Find(frame, cross); break;
-        case FrameGrab::kNoFrame:  break;
-        case FrameGrab::kClosed:
-            LOG(Cerf, "%s: the screen capture closed with the instance\n", TriggerName(trigger));
-            return;
+    if (frames_->Grab(frame)) status = scan_.Find(frame, cross);
+    if (run_->AbortGeneration() != generation) {
+        LOG(Cerf, "%s: a reset, a state restore or shutdown stopped the scan\n", TriggerName(trigger));
+        return;
     }
     if (status != CrossScanStatus::kFound) {
         LOG(Cerf, "%s scan of the %ux%u screen: %s\n", TriggerName(trigger), frame.width, frame.height,
@@ -296,19 +194,14 @@ void AutoCalibration::Attempt(CalibrationTrigger trigger, const CalibrationFrame
     LOG(Cerf, "%s found the %s target at (%d,%d), guest turn %d, on the %ux%u screen\n", TriggerName(trigger),
         CalibrationCrossScan::ZoneName(cross.zone), cross.press_x, cross.press_y, cross.quarter, frame.width,
         frame.height);
-    switch (Confirm(kAttemptMessage)) {
-        case PromptAnswer::kYes: break;
-        case PromptAnswer::kNo:
-            LOG(Cerf, "automatic calibration declined\n");
-            return;
-        case PromptAnswer::kClosed:
-            LOG(Cerf, "the calibration prompt closed with the instance\n");
-            return;
+    if (!CalibrationApproved()) {
+        LOG(Cerf, "automatic calibration not approved\n");
+        return;
     }
     switch (run_->Perform(generation)) {
         case CalibrationOutcome::kDone:
             LOG(Cerf, "automatic calibration finished\n");
-            notifications_->Post(NotificationKind::Success, kFinishedText, kFinishedCardTimeout);
+            host_->CalibrationFinished();
             return;
         case CalibrationOutcome::kAborted:
             LOG(Cerf, "automatic calibration stopped by a reset, a state restore or shutdown\n");
@@ -324,56 +217,45 @@ bool AutoCalibration::ResolutionAllows() {
     if (w <= panel_->width + kResolutionDrift && h <= panel_->height + kResolutionDrift) return true;
     LOG(Cerf, "the Guest Additions screen is %ux%u, the board panel is %ux%u\n", w, h, panel_->width,
         panel_->height);
-    switch (Confirm(kResolutionMessage)) {
-        case PromptAnswer::kYes: return SwitchToPanelResolution(panel_->width, panel_->height);
-        case PromptAnswer::kNo:
-            LOG(Cerf, "the custom resolution stays, calibrating at it\n");
-            return true;
-        case PromptAnswer::kClosed:
-            LOG(Cerf, "the resolution prompt closed with the instance\n");
-            return false;
-    }
-    return false;
+    if (PanelResolutionApproved(panel_->width, panel_->height))
+        return SwitchToPanelResolution(panel_->width, panel_->height);
+    LOG(Cerf, "the custom resolution stays, calibrating at it\n");
+    return true;
 }
 
 bool AutoCalibration::SwitchToPanelResolution(uint32_t width, uint32_t height) {
     LOG(Cerf, "switching the Guest Additions resolution to %ux%u and soft resetting\n", width, height);
-    bool       written = false;
-    const bool ran     = host_->RunConfigurationJob([&] {
-        const uint32_t prev_w = config_->board_configurable_screen_width;
-        const uint32_t prev_h = config_->board_configurable_screen_height;
-        written               = emu_.Get<UserConfigWriter>().WriteConfigurableScreenSize(width, height);
-        if (written) emu_.Get<CerfVirtConfigApply>().Apply(GuestReset::kSoft, prev_w, prev_h);
-    });
-    if (!ran) {
-        LOG(Cerf, "the resolution switch did not run, the instance is closing\n");
+    const auto previous = config_->Live();
+    if (emu_.Get<UserConfigWriter>().WriteConfigurableScreenSize(width, height)) {
+        emu_.Get<CerfVirtConfigApply>().Apply(GuestReset::kSoft, previous->board_configurable_screen_width,
+                                              previous->board_configurable_screen_height);
         return false;
     }
-    if (written) return false;
     LOG(Cerf, "the panel resolution could not be written to the device configuration, calibrating at the custom "
               "resolution\n");
     return true;
 }
 
-PromptAnswer AutoCalibration::Confirm(const char* message) {
+bool AutoCalibration::CalibrationApproved() {
     if (config_->calibration_auto_answer) {
-        LOG(Cerf, "--auto-calibration answers Yes\n");
-        return PromptAnswer::kYes;
+        LOG(Cerf, "--auto-calibration approves the calibration\n");
+        return true;
     }
-    return host_->Confirm(kTitle, message);
+    return host_->ApprovesCalibration();
+}
+
+bool AutoCalibration::PanelResolutionApproved(uint32_t width, uint32_t height) {
+    if (config_->calibration_auto_answer) {
+        LOG(Cerf, "--auto-calibration approves the panel resolution\n");
+        return true;
+    }
+    return host_->ApprovesPanelResolution(width, height);
 }
 
 void AutoCalibration::Fail(CalibrationTrigger trigger, const char* reason) {
     LOG(Cerf, "%s: automatic calibration failed, %s\n", TriggerName(trigger), reason);
-    if (config_->calibration_auto_answer) return;
-    alert_->Show(AlertLevel::kError, AlertPlacement::kOverWindow, kTitle, kFailureText);
-    if (trigger == CalibrationTrigger::kGuestAdditions) ShowFallback();
-}
-
-void AutoCalibration::ShowFallback() {
-    if (config_->calibration_auto_answer || !GuestAdditionsCalibrationShown()) return;
-    LOG(GuestAdditions, "[CALIB] showing the Guest Additions fallback dialog\n");
-    host_->ShowFallback();
+    if (!config_->calibration_auto_answer) host_->CalibrationFailed();
+    failure_listeners_.Call(trigger);
 }
 
 const char* AutoCalibration::TriggerName(CalibrationTrigger trigger) {

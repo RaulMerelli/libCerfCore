@@ -5,7 +5,7 @@
 #include <cerfcore/core/cerf_emulator.h>
 #include <cerfcore/core/fatal.h>
 #include <cerfcore/core/instance_threads.h>
-#include "../../host/audio_activity_widget.h"
+#include "../../host/audio_activity.h"
 #include "pr31x00_sib_codec.h"
 #include "pr31500_id.h"
 #include "pr31700_id.h"
@@ -19,8 +19,8 @@ bool Pr31x00SibSpeaker::ShouldRegister() {
 
 void Pr31x00SibSpeaker::OnReady() {
     codec_ = &emu_.Get<Pr31x00SibCodec>();
-    paced_.Start(emu_.Get<Fatal>(), emu_.Get<InstanceThreads>(), "SibAudio", 0, 1, 16);
-    emu_.Get<AudioActivityWidget>().NotePresent();
+    paced_.Start(emu_.Get<Fatal>(), emu_.Get<InstanceThreads>(), emu_.TryGet<AudioOutputs>(), "SibAudio", 0, 1, 16);
+    emu_.Get<AudioActivity>().NotePresent();
 }
 
 void Pr31x00SibSpeaker::OnShutdown() { paced_.Stop(); }
@@ -47,7 +47,7 @@ void Pr31x00SibSpeaker::AddWord(uint32_t hold, bool sixteen_bit) {
 }
 
 void Pr31x00SibSpeaker::Flush() {
-    emu_.Get<AudioActivityWidget>().MarkTx();
+    emu_.Get<AudioActivity>().MarkTx();
     paced_.QueueOutputInHostBlocks(buf_.data(), static_cast<uint32_t>(buf_.size()));
     buf_.clear();
 }

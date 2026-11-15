@@ -11,6 +11,11 @@ namespace cerfcore {
 
 namespace {
 
+constexpr char kSlotAId[]           = "slot_a";
+constexpr char kSlotBId[]           = "slot_b";
+constexpr char kPcCardLabel[]       = "PC Card";
+constexpr char kCompactFlashLabel[] = "CompactFlash";
+
 constexpr uint32_t kPortTopLevelFirst = 0x5DCu;
 constexpr uint32_t kPortGpioPcs = 0x5EEu;
 constexpr uint32_t kPortInterruptStatus = 0x5FAu;
@@ -137,14 +142,14 @@ bool NecVrc4171a::ShouldRegister() {
 
 void NecVrc4171a::OnReady() {
     board_ = &emu_.Get<NecVrc4171aBoard>();
-    StartSockets(board_->SlotALabel(), SlotBLabel());
+    StartSockets({kSlotAId, board_->SlotALabel()}, SlotB());
 }
 
-std::optional<std::string> NecVrc4171a::SlotBLabel() {
+std::optional<ObjectIdentity> NecVrc4171a::SlotB() {
     switch (board_->SlotBConfiguration()) {
         case kConfig1SlotBNone:         return std::nullopt;
-        case kConfig1SlotBPcCard:       return std::string("PC Card");
-        case kConfig1SlotBCompactFlash: return std::string("CompactFlash");
+        case kConfig1SlotBPcCard:       return ObjectIdentity{kSlotBId, kPcCardLabel};
+        case kConfig1SlotBCompactFlash: return ObjectIdentity{kSlotBId, kCompactFlashLabel};
         default:
             emu_.Get<Fatal>().Die("[VRC4171A] the board wires slot B as a Miniature Card socket, which is not "
                                   "modeled");

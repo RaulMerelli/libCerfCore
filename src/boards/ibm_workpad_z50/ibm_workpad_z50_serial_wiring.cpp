@@ -9,6 +9,9 @@ namespace cerfcore {
 
 namespace {
 
+constexpr char kSerialPortId[]    = "serial_port";
+constexpr char kSerialPortLabel[] = "COM1";
+
 class IbmWorkpadZ50SerialWiring : public Vr41xxSerialWiring {
 public:
     using Vr41xxSerialWiring::Vr41xxSerialWiring;
@@ -18,7 +21,7 @@ public:
     }
 
     std::optional<Vr41xxSerialModem> ForSiu() const override {
-        return Vr41xxSerialModem("COM1", Vr41xxGiu::kDcdPin);
+        return Vr41xxSerialModem({kSerialPortId, kSerialPortLabel}, Vr41xxGiu::kDcdPin);
     }
 
     bool SupplyOn() override { return true; }

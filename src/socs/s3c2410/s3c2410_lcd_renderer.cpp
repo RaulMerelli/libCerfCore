@@ -8,7 +8,7 @@
 #include <cerfcore/core/byte_order.h>
 #include <cerfcore/core/cerf_emulator.h>
 #include <cerfcore/cpu/emulated_memory.h>
-#include <cerfcore/host/panel_frame_renderer.h>
+#include "../../host/panel_frame_renderer.h"
 #include <cerfcore/lcd/lcd_pixel_expand.h>
 
 #include <cstring>
@@ -40,16 +40,7 @@ public:
 
     bool HasFrame() override {
         auto& lcd = emu_.Get<S3C2410Lcd>();
-        if (!lcd.IsEnabled())              return false;
-        if (latch_.Latched())              return true;
-        const uint32_t fb_pa   = lcd.GetFbPa();
-        const uint32_t guest_w = lcd.GetGuestW();
-        const uint32_t guest_h = lcd.GetGuestH();
-        if (fb_pa == 0 || guest_w == 0 || guest_h == 0) return false;
-        const size_t fb_bytes = (size_t)guest_w * (size_t)guest_h
-                              * (size_t)lcd.GetBytesPerPixel();
-        return latch_.ProbeAndLatch(emu_.Get<EmulatedMemory>(),
-                                    fb_pa, fb_bytes);
+        return lcd.IsEnabled() && lcd.GetFbPa() != 0 && lcd.GetGuestW() != 0 && lcd.GetGuestH() != 0;
     }
 
     void RenderInto(uint32_t* dib_bgra32,

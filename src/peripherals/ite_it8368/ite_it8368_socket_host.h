@@ -11,7 +11,7 @@ class IteIt8368SocketHost : public Service,
                             public PcmciaSlotHost,
                             public IteIt8368IntSink {
 public:
-    IteIt8368SocketHost(CerfEmulator& emu, const char* slot_name);
+    IteIt8368SocketHost(CerfEmulator& emu, ObjectIdentity slot);
 
     void OnReady() override;
     void OnShutdown() override;

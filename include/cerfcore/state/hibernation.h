@@ -32,6 +32,7 @@ public:
     void RestoreAsync(const std::string& path, bool ram_only = false);
 
     void RegisterPreSaveListener(std::function<void()> fn);
+    void RegisterSavedListener(std::function<void(const std::string& path)> fn);
     void RegisterPostRestoreListener(std::function<void()> fn);
     void RegisterRomImage(uint64_t bytes);
 
@@ -70,6 +71,7 @@ private:
     std::atomic<bool> busy_{false};
 
     CallbackList<>                     pre_save_listeners_;
+    CallbackList<const std::string&>   saved_listeners_;
     CallbackList<>                     post_restore_listeners_;
     uint64_t                           registered_rom_bytes_ = 0;
 };

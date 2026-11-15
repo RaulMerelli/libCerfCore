@@ -13,14 +13,15 @@ namespace cerfcore {
 
 class CompactFlashCard : public PcmciaCard {
 public:
+    static constexpr const char* kDisplayName = "Compact Flash";
+
     CompactFlashCard(CerfEmulator& emu, std::string image_path);
     ~CompactFlashCard() override;
 
     std::string DisplayName() const override;
     PcmciaVoltageSense VoltageSense() const override { return { true, false, false }; }
     bool HoldsReadyBusyInReset() const override { return true; }
-    std::string TooltipDetail() const override;
-    const char* IconResource() const override { return "pcmcia_enabled_cf"; }
+    CardFacts Facts() const override;
 
     void PowerOn () override;
     void PowerOff() override;

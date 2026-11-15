@@ -6,7 +6,7 @@
 #include <cerfcore/core/byte_order.h>
 #include <cerfcore/core/cerf_emulator.h>
 #include <cerfcore/core/device_config.h>
-#include <cerfcore/host/guest_additions_frame_renderer.h>
+#include "../../host/guest_additions_frame_renderer.h"
 #include <cerfcore/lcd/lcd_pixel_expand.h>
 
 #include <algorithm>
@@ -28,20 +28,9 @@ public:
         emu_.Get<CerfVirtFramebuffer>().Geometry(w, h);
     }
 
-    bool HasFrame() override {
-        auto& fb = emu_.Get<CerfVirtFramebuffer>();
-        if (!fb.HasContent()) return false;
-        if (latch_.Latched()) return true;
-        const CerfVirtScanout s = fb.Scanout();
-        return latch_.ProbeAndLatch(fb.Bytes() + s.offset,
-                                    static_cast<size_t>(s.height) *
-                                        CerfVirt::FbRowBytes(s.width, s.bpp));
-    }
+    uint32_t DisplayQuarter() override { return emu_.Get<CerfVirtFramebuffer>().Quarter(); }
 
-    void RearmContentLatch() override {
-        GuestAdditionsFrameRenderer::RearmContentLatch();
-        emu_.Get<CerfVirtFramebuffer>().ClearContentEdge();
-    }
+    bool HasFrame() override { return emu_.Get<CerfVirtFramebuffer>().HasContent(); }
 
     void RenderInto(uint32_t* dib_bgra32,
                     uint32_t  host_w,

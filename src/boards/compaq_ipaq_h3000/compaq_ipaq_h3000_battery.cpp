@@ -10,7 +10,7 @@
 #include <cerfcore/boards/board_context.h>
 #include <cerfcore/core/byte_order.h>
 #include <cerfcore/core/cerf_emulator.h>
-#include <cerfcore/host/host_widget_registry.h>
+#include <cerfcore/host/machine_object_tree.h>
 
 namespace cerfcore {
 
@@ -37,11 +37,11 @@ bool CompaqIpaqH3000Battery::ShouldRegister() {
     return bd && bd->GetBoardFamilyId() == BoardFamilyId::CompaqIpaqH3000;
 }
 
-void CompaqIpaqH3000Battery::OnReady() { emu_.Get<HostWidgetRegistry>().Register(&battery_); }
+void CompaqIpaqH3000Battery::OnReady() { emu_.Get<MachineObjectTree>().Add(&battery_); }
 
 void CompaqIpaqH3000Battery::Reply(uint8_t* out) const {
     const bool     on_ac        = OnAc();
-    const int      fill         = battery_.FillPercent();
+    const int      fill         = battery_.ChargePercent();
     const uint16_t open_circuit = emu_.Get<CompaqIpaqH3000BatteryCurve>().VoltageFor(fill);
     out[0] = on_ac ? 1u : 0u;
     out[1] = kChemistryLithiumPolymer;
@@ -49,10 +49,10 @@ void CompaqIpaqH3000Battery::Reply(uint8_t* out) const {
     out[4] = !on_ac ? 0u : (IsCharging(on_ac, fill) ? kStatusCharging : kStatusFull);
 }
 
-bool CompaqIpaqH3000Battery::OnAc() const { return !battery_.IsOnBattery(); }
+bool CompaqIpaqH3000Battery::OnAc() const { return !battery_.OnBattery(); }
 
 bool CompaqIpaqH3000Battery::Charging() const {
-    return IsCharging(OnAc(), battery_.FillPercent());
+    return IsCharging(OnAc(), battery_.ChargePercent());
 }
 
 bool CompaqIpaqH3000Battery::IsCharging(bool on_ac, int fill_percent) {

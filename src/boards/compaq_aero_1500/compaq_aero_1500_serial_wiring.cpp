@@ -9,6 +9,9 @@ namespace cerfcore {
 
 namespace {
 
+constexpr char kSerialPortId[]    = "serial_port";
+constexpr char kSerialPortLabel[] = "COM1";
+
 constexpr int kRs232SupplyGpio = 48;
 
 class CompaqAero1500SerialWiring : public Vr41xxGpioSuppliedSerialWiring {
@@ -20,7 +23,7 @@ public:
     }
 
     std::optional<Vr41xxSerialModem> ForSiu() const override {
-        return Vr41xxSerialModem("COM1", Vr41xxGiu::kDcdPin);
+        return Vr41xxSerialModem({kSerialPortId, kSerialPortLabel}, Vr41xxGiu::kDcdPin);
     }
 
 protected:

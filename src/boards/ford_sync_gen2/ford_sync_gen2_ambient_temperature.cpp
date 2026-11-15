@@ -2,6 +2,7 @@
 #include <cerfcore/boards/board_context.h>
 #include "ford_sync_gen2_family_id.h"
 #include <cerfcore/core/cerf_emulator.h>
+#include <cerfcore/host/machine_object_tree.h>
 #include <cerfcore/state/state_stream.h>
 
 namespace cerfcore {
@@ -32,6 +33,17 @@ void FordSyncGen2AmbientTemperature::Clear() {
     state_.available = false;
     state_.half_celsius.reset();
     ++state_.revision;
+}
+
+TemperatureReading FordSyncGen2AmbientTemperature::Reading() const {
+    const Snapshot s = Read();
+    return TemperatureReading{s.available, s.half_celsius};
+}
+
+void FordSyncGen2AmbientTemperature::SetReading(const TemperatureReading& reading) {
+    if (reading.reported) Set(reading.half_celsius);
+    else                  Clear();
+    Changed();
 }
 
 void FordSyncGen2AmbientTemperature::SaveState(StateWriter& w) const {

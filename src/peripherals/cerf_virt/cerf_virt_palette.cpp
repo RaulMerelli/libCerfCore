@@ -38,7 +38,6 @@ public:
     void WriteWord(uint32_t addr, uint32_t value) override {
         const uint32_t idx = (addr - MmioBase()) >> 2u;
         fb_->SetPaletteEntry(idx, value & 0x00FFFFFFu);
-        fb_->MarkDirty();
     }
 
 private:

@@ -29,7 +29,8 @@ void CerfVirtColorScheme::OnReady() {
 }
 
 void CerfVirtColorScheme::ApplyFromConfig() {
-    const std::string& key = emu_.Get<DeviceConfig>().guest_additions_color_scheme;
+    const auto         live = emu_.Get<DeviceConfig>().Live();
+    const std::string& key  = live->guest_additions_color_scheme;
     count_   = 0;
     present_ = false;
     if (key.empty()) return;

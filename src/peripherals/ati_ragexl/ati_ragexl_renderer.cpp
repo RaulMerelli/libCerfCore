@@ -4,7 +4,7 @@
 
 #include <cerfcore/core/byte_order.h>
 #include <cerfcore/core/cerf_emulator.h>
-#include <cerfcore/host/panel_frame_renderer.h>
+#include "../../host/panel_frame_renderer.h"
 #include <cerfcore/lcd/lcd_pixel_expand.h>
 
 #include <cstring>
@@ -13,9 +13,6 @@ namespace cerfcore {
 
 namespace {
 
-/* Presents the Rage XL framebuffer at the CRTC-programmed geometry. The Mach64
-   stores direct-colour pixels little-endian as B,G,R(,X); 16/15 bpp are 5-6-5 /
-   5-5-5 (ati Programmer's Guide pixel formats). */
 class AtiRageXlRenderer : public PanelFrameRenderer {
 public:
     using PanelFrameRenderer::PanelFrameRenderer;
@@ -36,8 +33,7 @@ public:
             return false;
         const size_t bytes = (size_t)f.stride * f.height;
         if ((size_t)f.start + bytes > f.fb_size) return false;
-        if (latch_.Latched()) return true;
-        return latch_.ProbeAndLatch(f.fb + f.start, bytes);
+        return true;
     }
 
     void RenderInto(uint32_t* dib, uint32_t host_w, uint32_t host_h) override {
@@ -95,7 +91,7 @@ private:
     }
 };
 
-}  /* namespace */
+}
 
 REGISTER_SERVICE_AS(AtiRageXlRenderer, PanelFrameRenderer);
 

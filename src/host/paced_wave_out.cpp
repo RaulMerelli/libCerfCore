@@ -1,7 +1,5 @@
 #include "paced_wave_out.h"
 
-#include "../platform/wave_pcm_format.h"
-
 #include <cerfcore/core/fatal.h>
 #include <cerfcore/core/log.h>
 
@@ -11,15 +9,17 @@
 
 namespace cerfcore {
 
-void PacedWaveOut::Start(Fatal& fatal, InstanceThreads& threads, const char* log_tag, uint32_t rate_hz,
-                         uint16_t channels, uint16_t bits) {
+void PacedWaveOut::Start(Fatal& fatal, InstanceThreads& threads, AudioOutputs* outputs, const char* log_tag,
+                         uint32_t rate_hz, uint16_t channels, uint16_t bits) {
     fatal_   = &fatal;
     log_tag_ = log_tag;
     fmt_rate_.store(rate_hz, std::memory_order_release);
     fmt_channels_.store(channels, std::memory_order_release);
     fmt_bits_.store(bits, std::memory_order_release);
+    if (outputs == nullptr) return;
+    has_output_ = true;
     sink_.Start(
-        fatal, threads,
+        fatal, threads, outputs->CreateOutput(log_tag),
         [this] {
             std::lock_guard<std::mutex> lk(audio_mutex_);
             ApplyFormatLocked();
@@ -43,7 +43,7 @@ void PacedWaveOut::SetFormat(uint32_t rate_hz, uint16_t channels, uint16_t bits)
         fmt_channels_.store(channels, std::memory_order_release);
         fmt_bits_.store(bits, std::memory_order_release);
     }
-    sink_.PostCommand(kCommandSetFormat);
+    if (has_output_) sink_.PostCommand(kCommandSetFormat);
 }
 
 uint64_t PacedWaveOut::RequestedFormatLocked() const {
@@ -148,6 +148,7 @@ void PacedWaveOut::OnBlockDone(uint32_t slot) {
 }
 
 void PacedWaveOut::BeginAudioOut() {
+    if (!has_output_) return;
     std::lock_guard<std::mutex> lk(audio_mutex_);
     rate_match_.Restart();
     device_started_ = false;
@@ -284,7 +285,8 @@ void PacedWaveOut::RefreshPositionLocked() {
 }
 
 uint32_t PacedWaveOut::StreamFrameBytes() const {
-    return PcmFrameBytes(fmt_channels_.load(std::memory_order_acquire), fmt_bits_.load(std::memory_order_acquire));
+    return AudioFormat{0u, fmt_channels_.load(std::memory_order_acquire), fmt_bits_.load(std::memory_order_acquire)}
+        .FrameBytes();
 }
 
 uint32_t PacedWaveOut::StreamBlockBytes() const {

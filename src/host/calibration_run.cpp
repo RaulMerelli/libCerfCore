@@ -1,8 +1,9 @@
 #include "calibration_run.h"
 
+#include "calibration_frame_source.h"
+
 #include <cerfcore/core/cerf_emulator.h>
 #include <cerfcore/core/log.h>
-#include <cerfcore/host/calibration_host.h>
 #include <cerfcore/host/calibration_press_cursor.h>
 #include <cerfcore/host/touch_input.h>
 #include <cerfcore/socs/guest_cpu_reset.h>
@@ -47,7 +48,7 @@ void CalibrationRun::OnReady() {
     touch_  = &emu_.Get<TouchInput>();
     freeze_ = &emu_.Get<EmulationFreeze>();
     lock_   = &emu_.Get<HostPointerInputLock>();
-    host_   = &emu_.Get<CalibrationHost>();
+    frames_ = &emu_.Get<CalibrationFrameSource>();
     cursor_ = &emu_.Get<CalibrationPressCursor>();
     emu_.Get<GuestCpuReset>().RegisterResetListener([this](ResetLineKind) {
         if (!emu_.Get<GuestCpuReset>().DeliveredResetWasResume()) Abort();
@@ -182,28 +183,18 @@ CalibrationRun::PressResult CalibrationRun::WatchAfterRelease(const CalibrationF
 
 CalibrationRun::PressResult CalibrationRun::BoxReacted(const CalibrationFrame& reference, const CalibrationCross& cross,
                                                        CalibrationFrame& now) {
-    switch (host_->CaptureSurface(now)) {
-        case FrameGrab::kClosed:  return PressResult::kAborted;
-        case FrameGrab::kNoFrame: return PressResult::kIgnored;
-        case FrameGrab::kCaptured:
-            return CalibrationCrossScan::BoxChanged(reference, now, cross) ? PressResult::kPassed
-                                                                            : PressResult::kIgnored;
-    }
-    return PressResult::kIgnored;
+    if (!frames_->Grab(now)) return PressResult::kIgnored;
+    return CalibrationCrossScan::BoxChanged(reference, now, cross) ? PressResult::kPassed : PressResult::kIgnored;
 }
 
 CalibrationRun::SettleResult CalibrationRun::Settle(CalibrationFrame& settled) {
     const Clock::time_point start = Clock::now();
     Clock::time_point       quiet = start;
-    FrameGrab               grab  = host_->CaptureSurface(settled);
-    if (grab == FrameGrab::kClosed) return SettleResult::kAborted;
-    bool             have = grab == FrameGrab::kCaptured;
-    CalibrationFrame now;
+    bool                    have  = frames_->Grab(settled);
+    CalibrationFrame        now;
     for (;;) {
         if (!Wait(kSettlePoll)) return SettleResult::kAborted;
-        grab = host_->CaptureSurface(now);
-        if (grab == FrameGrab::kClosed) return SettleResult::kAborted;
-        if (grab == FrameGrab::kCaptured && (!have || now != settled)) {
+        if (frames_->Grab(now) && (!have || now != settled)) {
             std::swap(settled, now);
             have  = true;
             quiet = Clock::now();

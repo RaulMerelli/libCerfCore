@@ -10,7 +10,7 @@
 #include <cerfcore/core/fatal.h>
 #include <cerfcore/core/log.h>
 #include <cerfcore/cpu/emulated_memory.h>
-#include <cerfcore/host/panel_frame_renderer.h>
+#include "../../host/panel_frame_renderer.h"
 #include <cerfcore/lcd/lcd_pixel_expand.h>
 
 #include <algorithm>
@@ -65,28 +65,7 @@ public:
 
     bool HasFrame() override {
         auto& lcd = emu_.Get<Sa11xxLcd>();
-        if (!lcd.IsEnabled())              return false;
-        if (latch_.Latched())              return true;
-        const uint32_t fb_pa   = lcd.GetFbPa();
-        const uint32_t guest_w = lcd.GetGuestW();
-        const uint32_t guest_h = PanelH();
-        if (fb_pa == 0 || guest_w == 0 || guest_h == 0) return false;
-
-        uint32_t data_off    = kDummyPaletteBytes;
-        size_t   pixel_bytes = (size_t)guest_w * (size_t)guest_h
-                             * (size_t)kBytesPerGuestPixel;
-        if (!lcd.IsColor()) {
-            const uint8_t* fb_base =
-                emu_.Get<EmulatedMemory>().TryTranslate(fb_pa);
-            if (!fb_base) return false;
-            const MonoLayout ml = ResolveMonoLayout(fb_base);
-            data_off    = ml.data_off;
-            pixel_bytes = (size_t)guest_w * (size_t)guest_h
-                        * (size_t)ml.bits_per_px / 8u;
-        }
-        return latch_.ProbeAndLatch(emu_.Get<EmulatedMemory>(),
-                                    fb_pa + data_off,
-                                    pixel_bytes);
+        return lcd.IsEnabled() && lcd.GetFbPa() != 0 && lcd.GetGuestW() != 0 && PanelH() != 0;
     }
 
     void RenderInto(uint32_t* dib_bgra32,

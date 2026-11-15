@@ -388,7 +388,7 @@ bool CerfVirtBlitter::Execute(const CerfBltDescriptor& d) {
         }
     }
 
-    fb_->MarkDirty();
+    fb_->MarkWritten(dst.host_base);
     return true;
 }
 
@@ -456,7 +456,7 @@ bool CerfVirtBlitter::BlendAAText(const CerfBltDescriptor& d, Surface& dst,
             else          BltPixelOps::WritePixel(dp, d_bpp, v);
         }
     }
-    fb_->MarkDirty();
+    fb_->MarkWritten(dst.host_base);
     return true;
 }
 

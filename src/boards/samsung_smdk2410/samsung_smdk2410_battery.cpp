@@ -2,8 +2,8 @@
 
 #include <cerfcore/core/cerf_emulator.h>
 #include <cerfcore/core/log.h>
-#include "../../host/battery_widget.h"
-#include <cerfcore/host/host_widget_registry.h>
+#include <cerfcore/host/battery.h>
+#include <cerfcore/host/machine_object_tree.h>
 #include "../../peripherals/peripheral_dispatcher.h"
 #include <cerfcore/boards/board_context.h>
 #include "samsung_smdk2410_family_id.h"
@@ -31,7 +31,7 @@ public:
     }
     void OnReady() override {
         emu_.Get<PeripheralDispatcher>().Register(this);
-        emu_.Get<HostWidgetRegistry>().Register(&battery_);
+        emu_.Get<MachineObjectTree>().Add(&battery_);
     }
 
     uint32_t MmioBase() const override { return kBase; }
@@ -41,7 +41,7 @@ public:
     uint16_t ReadHalf(uint32_t addr) override;
 
 private:
-    BatteryWidget battery_;
+    Battery       battery_{emu_};
     uint16_t      temperature_ = 0;   /* raw, not interpreted */
 };
 
@@ -51,11 +51,11 @@ uint8_t SamsungSmdk2410Battery::ReadByte(uint32_t addr) {
     const char* name = "?";
     switch (off) {
         case kRegIsOnBattery:
-            value = battery_.IsOnBattery() ? 1u : 0u;
+            value = battery_.OnBattery() ? 1u : 0u;
             name  = "IsOnBattery";
             break;
         case kRegChargePercent:
-            value = static_cast<uint8_t>(100 - battery_.FillPercent());
+            value = static_cast<uint8_t>(100 - battery_.ChargePercent());
             name  = "ChargePercent";
             break;
         default:

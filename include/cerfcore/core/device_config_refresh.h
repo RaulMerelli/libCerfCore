@@ -2,6 +2,7 @@
 
 #include "service.h"
 #include "callback_list.h"
+#include "device_config.h"
 
 #include <functional>
 
@@ -16,6 +17,8 @@ public:
     void Refresh();
 
 private:
+    LiveDeviceSettings LoadFiles(const DeviceConfig& config);
+
     CallbackList<> listeners_;
 };
 

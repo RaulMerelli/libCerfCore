@@ -7,8 +7,8 @@
 
 namespace cerfcore {
 
-Vr41xxSerialModem::Vr41xxSerialModem(std::string label_in, int carrier_gpio_in)
-    : label(std::move(label_in)), carrier_gpio(carrier_gpio_in) {}
+Vr41xxSerialModem::Vr41xxSerialModem(ObjectIdentity port_in, int carrier_gpio_in)
+    : port(std::move(port_in)), carrier_gpio(carrier_gpio_in) {}
 
 bool Vr41xxGpioSuppliedSerialWiring::SupplyOn() {
     return emu_.Get<Vr41xxGiu>().OutputDrive(SupplyGpio()) == PinDrive::kHigh;

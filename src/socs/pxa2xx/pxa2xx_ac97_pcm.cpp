@@ -5,7 +5,7 @@
 #include <cerfcore/core/fatal.h>
 #include <cerfcore/core/instance_threads.h>
 #include <cerfcore/cpu/emulated_memory.h>
-#include "../../host/audio_activity_widget.h"
+#include "../../host/audio_activity.h"
 #include "../../peripherals/ac97_codec.h"
 #include "pxa2xx_ac97_bit_clock.h"
 
@@ -29,8 +29,8 @@ constexpr uint32_t kRightHalf = 2u;
 void Pxa2xxAc97Pcm::OnReady() {
     Pxa2xxAc97OutFifo::OnReady();
     bit_clock_ = &emu_.Get<Pxa2xxAc97BitClock>();
-    host_.Start(emu_.Get<Fatal>(), emu_.Get<InstanceThreads>(), "Pxa2xxAc97Pcm", 0u, kChannels, kBits);
-    emu_.Get<AudioActivityWidget>().NotePresent();
+    host_.Start(emu_.Get<Fatal>(), emu_.Get<InstanceThreads>(), emu_.TryGet<AudioOutputs>(), "Pxa2xxAc97Pcm", 0u, kChannels, kBits);
+    emu_.Get<AudioActivity>().NotePresent();
 }
 
 void Pxa2xxAc97Pcm::OnShutdown() { host_.Stop(); }
@@ -97,7 +97,7 @@ void Pxa2xxAc97Pcm::QueueHost(const void* bytes, uint32_t length) {
         host_active_ = true;
     }
     host_.QueueOutput(bytes, length);
-    emu_.Get<AudioActivityWidget>().MarkTx();
+    emu_.Get<AudioActivity>().MarkTx();
 }
 
 REGISTER_SERVICE(Pxa2xxAc97Pcm);

@@ -1,17 +1,13 @@
 #pragma once
 
 #include <cerfcore/core/service.h>
-#include <cerfcore/host/host_widget.h>
+#include <cerfcore/host/machine_indicators.h>
 
 #include <mutex>
 
 namespace cerfcore {
 
-/* LED is behind the MCU (gwes.exe nled driver sub_927C4: 0xE1=on 0xE2=blink
-   0xE3=off; sub_926CC: 0xE0 -> status bit0=on bit1=blink). The button is GPIO13
-   falling edge (gwes sub_928F4 arms GFER bit13) -> SYSINTR 22 -> gwes posts
-   0x464 to gweWinCENotify (acknowledge/snooze). */
-class HpJornada700Led : public Service, public HostWidget {
+class HpJornada700Led : public Service, public MachineLamp {
 public:
     using Service::Service;
 
@@ -20,30 +16,33 @@ public:
 
     enum class State { Off, On, Blink };
 
-    /* MCU command handlers (SSP/JIT thread). */
     void    SetState(State s);
-    uint8_t StatusByte() const;   /* 0xE0 reply: off=0x00 on=0x01 blink=0x03 */
+    uint8_t StatusByte() const;
 
-    /* HostWidget */
-    std::string WidgetName() const override { return "Notification LED"; }
-    WidgetGroup Group() const override { return WidgetGroup::Indicator; }
-    std::string Tooltip() const override;
-    bool        TryPrimaryAction() override { PressButton(); return true; }
-    std::vector<WidgetControl> Controls() override;
-    WidgetIcon  Icon() const override;
-    bool        PollDirty() override;
+    std::string ObjectId() const override { return "notification_led"; }
+    static constexpr char kObjectName[] = "Notification LED";
+    std::string ObjectName() const override { return kObjectName; }
+    LampState   Lamp() const override;
 
 private:
+    class Button final : public MachineButton {
+    public:
+        explicit Button(HpJornada700Led& owner) : owner_(owner) {}
+        std::string ObjectId() const override { return "button"; }
+        static constexpr char kObjectName[] = "Notification button";
+        std::string ObjectName() const override { return kObjectName; }
+        void        Press() override { owner_.PressButton(); }
+
+    private:
+        HpJornada700Led& owner_;
+    };
+
     void  PressButton();
     State CurrentState() const;
-    static bool LitNow(State s);
 
     mutable std::mutex state_mutex_;
     State              state_ = State::Off;
-
-    /* UI-thread repaint tracking (blink phase included). */
-    State last_drawn_state_ = State::Off;
-    bool  last_drawn_lit_   = false;
+    Button             button_{*this};
 };
 
 }

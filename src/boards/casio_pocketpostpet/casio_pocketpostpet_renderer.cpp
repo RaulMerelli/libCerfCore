@@ -5,7 +5,7 @@
 #include <cerfcore/boards/board_context.h>
 #include "casio_pocketpostpet_family_id.h"
 #include <cerfcore/core/cerf_emulator.h>
-#include <cerfcore/host/panel_frame_renderer.h>
+#include "../../host/panel_frame_renderer.h"
 #include "../../lcd/panel_scanout.h"
 
 namespace cerfcore {
@@ -31,10 +31,7 @@ public:
 
     bool HasFrame() override {
         auto& asic = emu_.Get<CasioPocketpostpetAsic>();
-        if (!asic.IsDisplayEnabled()) return false;
-        if (latch_.Latched())         return true;
-        const uint32_t bytes = asic.StrideBytes() * asic.GuestH();
-        return latch_.ProbeAndLatch(asic.FbBytes(), bytes);
+        return asic.IsDisplayEnabled();
     }
 
     void RenderInto(uint32_t* dib, uint32_t host_w, uint32_t host_h) override {

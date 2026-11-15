@@ -3,7 +3,7 @@
 #include <cerfcore/boards/board_context.h>
 #include "pangolin_family_id.h"
 #include <cerfcore/core/cerf_emulator.h>
-#include <cerfcore/host/host_widget_registry.h>
+#include <cerfcore/host/machine_object_tree.h>
 #include <cerfcore/socs/guest_cpu_reset.h>
 #include "../../peripherals/pcmcia/pcmcia_auto_insert.h"
 #include "../../peripherals/pcmcia/pcmcia_slot.h"
@@ -16,13 +16,16 @@ namespace cerfcore {
 
 namespace {
 
+constexpr char kPcCardSlotId[]    = "pc_card_slot";
+constexpr char kPcCardSlotLabel[] = "PC Card slot";
+
 constexpr uint32_t kGpioCd  = 6u;
 constexpr uint32_t kGpioIrq = 5u;
 
 class PangolinPcmcia : public Service, public PcmciaSlotHost {
 public:
     explicit PangolinPcmcia(CerfEmulator& emu)
-        : Service(emu), slot_(emu, *this, "PC Card slot") {}
+        : Service(emu), slot_(emu, *this, {kPcCardSlotId, kPcCardSlotLabel}) {}
 
     bool ShouldRegister() override {
         return emu_.Get<BoardContext>().GetBoardFamilyId() == BoardFamilyId::Pangolin;
@@ -30,7 +33,7 @@ public:
 
     void OnReady() override {
         emu_.Get<PcmciaSpaceRouter>().ProvideSockets(&slot_, nullptr);
-        emu_.Get<HostWidgetRegistry>().Register(&slot_);
+        emu_.Get<MachineObjectTree>().Add(&slot_);
 
         auto& gpio = emu_.Get<Sa11xxGpio>();
         gpio.DriveInputPin(kGpioCd, true);    /* empty: CF_CD idles high (no card) */

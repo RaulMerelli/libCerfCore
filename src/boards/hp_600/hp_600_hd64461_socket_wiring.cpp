@@ -8,6 +8,11 @@ namespace cerfcore {
 
 namespace {
 
+constexpr char kPcCardSlotId[]    = "pc_card_slot";
+constexpr char kPcCardSlotLabel[] = "PC Card slot";
+constexpr char kCfSlotId[]        = "cf_slot";
+constexpr char kCfSlotLabel[]     = "CF slot";
+
 class Hp600Hd64461SocketWiring : public Hd64461SocketWiring {
 public:
     using Hd64461SocketWiring::Hd64461SocketWiring;
@@ -21,7 +26,10 @@ public:
         return !vccsel0 && !vccsel1;
     }
 
-    std::string SocketLabel(uint32_t channel) const override { return channel == 0u ? "PC Card slot" : "CF slot"; }
+    ObjectIdentity Socket(uint32_t channel) const override {
+        if (channel == 0u) return {kPcCardSlotId, kPcCardSlotLabel};
+        return {kCfSlotId, kCfSlotLabel};
+    }
 
     uint16_t ModePins() const override { return 0u; }
 };

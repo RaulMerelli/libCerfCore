@@ -2,7 +2,7 @@
 
 #include <cerfcore/core/byte_order.h>
 #include <cerfcore/core/cerf_emulator.h>
-#include <cerfcore/host/panel_frame_renderer.h>
+#include "../../host/panel_frame_renderer.h"
 #include <cerfcore/lcd/lcd_pixel_expand.h>
 
 #include <cstdint>
@@ -25,13 +25,12 @@ public:
     bool HasFrame() override {
         Chip& mq = *chip_;
         if (!mq.IsEnabled())  return false;
-        if (latch_.Latched()) return true;
         const uint32_t gh = mq.GetGuestH(), stride = mq.Stride();
         if (gh == 0 || stride == 0) return false;
         const uint64_t base  = mq.FbWindowOffset();
         const uint64_t bytes = static_cast<uint64_t>(stride) * gh;
         if (base + bytes > mq.FbSize()) return false;
-        return latch_.ProbeAndLatch(mq.FbBytes() + base, static_cast<size_t>(bytes));
+        return true;
     }
 
     void RenderInto(uint32_t* dib, uint32_t host_w, uint32_t host_h) override {

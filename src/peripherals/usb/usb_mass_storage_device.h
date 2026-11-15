@@ -14,6 +14,7 @@ public:
     bool OpenImage(const std::string& path, const std::string& name);
     const std::string& ImagePath() const { return image_path_; }
     const std::string& ImageName() const { return image_name_; }
+    uint64_t CapacityBytes() const { return disk_.SectorCount() * DiskImage::kSectorSize; }
     static constexpr uint32_t kStateKind = 2;
     uint32_t StateKind() const override { return kStateKind; }
 

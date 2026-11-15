@@ -4,8 +4,8 @@
 #include <cerfcore/core/log.h>
 #include <cerfcore/boards/board_context.h>
 #include "odo_family_id.h"
-#include <cerfcore/host/host_widget.h>
-#include <cerfcore/host/host_widget_registry.h>
+#include <cerfcore/host/machine_indicators.h>
+#include <cerfcore/host/machine_object_tree.h>
 #include "../../peripherals/peripheral_dispatcher.h"
 #include <cerfcore/socs/guest_cpu_reset.h>
 #include <cerfcore/state/state_stream.h>
@@ -25,8 +25,10 @@ constexpr uint32_t kHkeepFpgaSize     = 0x00030000u;
 constexpr uint32_t kLedDiscretePa     = 0x04040000u;
 constexpr uint32_t kLedAlphaPa        = 0x04060000u;
 constexpr uint32_t kLedAlphaMirror    = 0x0000FFFFu;
+constexpr uint32_t kDiscreteLeds      = 8u;
+constexpr ObjectRgb kLedColor{255, 180, 40};
 
-class OdoHkeepFpga : public Peripheral, public HostWidget {
+class OdoHkeepFpga : public Peripheral, public MachineCharacterDisplay {
 public:
     using Peripheral::Peripheral;
 
@@ -41,7 +43,9 @@ public:
             led_alpha_value_    = 0;
         });
         emu_.Get<PeripheralDispatcher>().Register(this);
-        emu_.Get<HostWidgetRegistry>().Register(this);
+        auto& tree = emu_.Get<MachineObjectTree>();
+        tree.Add(this);
+        for (auto& led : leds_) tree.Add(&led, this);
     }
 
     uint32_t MmioBase() const override { return kHkeepFpgaPaBase; }
@@ -50,8 +54,6 @@ public:
     uint32_t ReadWord (uint32_t addr) override;
     void     WriteWord(uint32_t addr, uint32_t value) override;
 
-    /* State image: the two guest-written LED registers. last_drawn_*
-       are UI-thread display latches, not guest state. */
     void SaveState(StateWriter& w) override {
         std::lock_guard<std::mutex> lk(state_mutex_);
         w.Write<uint32_t>("led_discrete_value", led_discrete_value_);
@@ -63,16 +65,33 @@ public:
         r.Read("led_alpha_value", led_alpha_value_);
     }
 
-    /* HostWidget. The icon IS the LED - the discrete LED register lights it,
-       the 4-char alpha display shows in the tooltip. No RX/TX. */
-    std::string WidgetName() const override { return "Debug LED"; }
-    WidgetGroup Group() const override { return WidgetGroup::Indicator; }
-    std::string Tooltip() const override;
-    WidgetIcon  Icon() const override;
-    bool PollDirty() override;
+    std::string ObjectId() const override { return "debug_display"; }
+    static constexpr char kObjectName[] = "Debug LED";
+    std::string ObjectName() const override { return kObjectName; }
+    std::string Characters() const override;
 
 private:
+    class DiscreteLed final : public MachineLamp {
+    public:
+        DiscreteLed(OdoHkeepFpga& owner, uint32_t bit) : owner_(owner), bit_(bit) {}
+        std::string ObjectId() const override { return "led" + std::to_string(bit_); }
+        static constexpr char kObjectNameFormat[] = "LED %u";
+        std::string ObjectName() const override {
+            char name[sizeof(kObjectNameFormat) + 8];
+            std::snprintf(name, sizeof(name), kObjectNameFormat, static_cast<unsigned>(bit_));
+            return name;
+        }
+        LampState   Lamp() const override { return LampState{owner_.DiscreteLit(bit_), false, kLedColor}; }
+
+        using MachineLamp::Refresh;
+
+    private:
+        OdoHkeepFpga& owner_;
+        uint32_t      bit_;
+    };
+
     bool ClassifyAddr(uint32_t addr, bool* out_is_alpha) const;
+    bool DiscreteLit(uint32_t bit) const;
 
     void LogAlphaWrite(uint32_t addr, uint32_t value);
 
@@ -80,11 +99,14 @@ private:
     uint32_t           led_discrete_value_ = 0;
     uint32_t           led_alpha_value_    = 0;
 
-    /* UI-thread only: last values the widget drew, so PollDirty repaints only
-       on change. Init to impossible so the first poll always repaints. */
-    uint32_t last_drawn_discrete_ = ~0u;
-    uint32_t last_drawn_alpha_    = ~0u;
+    DiscreteLed leds_[kDiscreteLeds] = {{*this, 0}, {*this, 1}, {*this, 2}, {*this, 3},
+                                        {*this, 4}, {*this, 5}, {*this, 6}, {*this, 7}};
 };
+
+bool OdoHkeepFpga::DiscreteLit(uint32_t bit) const {
+    std::lock_guard<std::mutex> lk(state_mutex_);
+    return (led_discrete_value_ >> bit) & 1u;
+}
 
 bool OdoHkeepFpga::ClassifyAddr(uint32_t addr, bool* out_is_alpha) const {
     if (addr == kLedDiscretePa) {
@@ -133,8 +155,10 @@ void OdoHkeepFpga::WriteWord(uint32_t addr, uint32_t value) {
     }
 
     if (is_alpha) {
+        Refresh();
         LogAlphaWrite(addr, value);
     } else {
+        for (DiscreteLed& led : leds_) led.Refresh();
 #if CERF_DEV_MODE
         /* Same 1 kHz consideration as the read path. */
         LOG(Board, "Odo HKEEP LED_DISCRETE = 0x%08X\n", value);
@@ -166,43 +190,18 @@ void OdoHkeepFpga::LogAlphaWrite(uint32_t addr, uint32_t value) {
         sanitize(as_ascii[3]));
 }
 
-std::string OdoHkeepFpga::Tooltip() const {
-    uint32_t discrete, alpha;
+std::string OdoHkeepFpga::Characters() const {
+    uint32_t alpha;
     {
         std::lock_guard<std::mutex> lk(state_mutex_);
-        discrete = led_discrete_value_;
-        alpha    = led_alpha_value_;
+        alpha = led_alpha_value_;
     }
-    auto sane = [](uint32_t v, int shift) -> char {
-        const char c = static_cast<char>((v >> shift) & 0xFFu);
-        return (c >= 0x20 && c < 0x7F) ? c : '.';
-    };
-    char buf[64];
-    std::snprintf(buf, sizeof(buf), "Debug LED  '%c%c%c%c'  discrete=0x%08X",
-                  sane(alpha, 0), sane(alpha, 8), sane(alpha, 16), sane(alpha, 24),
-                  discrete);
-    return buf;
-}
-
-WidgetIcon OdoHkeepFpga::Icon() const {
-    uint32_t discrete;
-    {
-        std::lock_guard<std::mutex> lk(state_mutex_);
-        discrete = led_discrete_value_;
+    std::string text;
+    for (int shift = 0; shift < 32; shift += 8) {
+        const char c = static_cast<char>((alpha >> shift) & 0xFFu);
+        text += (c >= 0x20 && c < 0x7F) ? c : '.';
     }
-    return LedGridIcon{static_cast<uint8_t>(discrete & 0xFFu), WidgetRgb{255, 180, 40},
-                       WidgetRgb{60, 50, 30}, WidgetRgb{90, 75, 40}};
-}
-
-bool OdoHkeepFpga::PollDirty() {
-    std::lock_guard<std::mutex> lk(state_mutex_);
-    if (led_discrete_value_ == last_drawn_discrete_ &&
-        led_alpha_value_    == last_drawn_alpha_) {
-        return false;
-    }
-    last_drawn_discrete_ = led_discrete_value_;
-    last_drawn_alpha_    = led_alpha_value_;
-    return true;
+    return text;
 }
 
 }  /* namespace */

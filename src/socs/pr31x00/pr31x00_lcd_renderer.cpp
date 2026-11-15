@@ -9,7 +9,7 @@
 #include "pr31700_id.h"
 #include <cerfcore/core/cerf_emulator.h>
 #include <cerfcore/cpu/emulated_memory.h>
-#include <cerfcore/host/panel_frame_renderer.h>
+#include "../../host/panel_frame_renderer.h"
 #include <cerfcore/lcd/lcd_pixel_expand.h>
 
 #include <algorithm>
@@ -43,12 +43,7 @@ public:
 
     bool HasFrame() override {
         const Pr31x00Lcd::Scanout s = emu_.Get<Pr31x00Lcd>().GetScanout();
-        if (!s.enabled)        return false;
-        if (latch_.Latched())  return true;
-        if (s.fb_pa == 0) return false;
-        const size_t fb_bytes = (size_t)s.lines * s.StrideBytes();
-        return latch_.ProbeAndLatch(emu_.Get<EmulatedMemory>(),
-                                    s.fb_pa, fb_bytes);
+        return s.enabled && s.fb_pa != 0;
     }
 
     void RenderInto(uint32_t* dib_bgra32, uint32_t host_w, uint32_t host_h) override {

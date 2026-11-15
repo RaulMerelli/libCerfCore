@@ -1,6 +1,7 @@
 #pragma once
 
 #include "../core/board_database.h"
+#include "../core/callback_list.h"
 #include "../core/service.h"
 #include "calibration_cross_scan.h"
 #include "calibration_host.h"
@@ -8,6 +9,7 @@
 #include <chrono>
 #include <condition_variable>
 #include <cstdint>
+#include <functional>
 #include <mutex>
 #include <optional>
 #include <thread>
@@ -15,13 +17,10 @@
 namespace cerfcore {
 
 struct DeviceConfig;
+class CalibrationFrameSource;
 class CalibrationRun;
 class HostPresentation;
 class InstanceThreads;
-class NotificationStack;
-class UserAlert;
-class StateReader;
-class StateWriter;
 
 enum class CalibrationTrigger : uint8_t { kBootWindow, kMenu, kGuestAdditions };
 
@@ -34,12 +33,7 @@ public:
 
     bool CanPress() const;
     void Request(CalibrationTrigger trigger);
-    void OnGuestAdditionsCalibration(bool shown);
-    bool GuestAdditionsCalibrationShown() const;
-    void SwitchToStockPointer();
-
-    void SaveGuestAdditionsState(StateWriter& w) const;
-    void RestoreGuestAdditionsState(StateReader& r);
+    void RegisterFailureListener(std::function<void(CalibrationTrigger)> listener);
 
 private:
     using Clock = std::chrono::steady_clock;
@@ -56,25 +50,21 @@ private:
                  uint64_t generation);
     bool ResolutionAllows();
     bool SwitchToPanelResolution(uint32_t width, uint32_t height);
-    PromptAnswer Confirm(const char* message);
+    bool CalibrationApproved();
+    bool PanelResolutionApproved(uint32_t width, uint32_t height);
     void Fail(CalibrationTrigger trigger, const char* reason);
-    void ShowFallback();
-    bool SwitchBackLocked();
 
     static const char* TriggerName(CalibrationTrigger trigger);
 
     CalibrationHost*              host_          = nullptr;
+    CalibrationFrameSource*       frames_        = nullptr;
     HostPresentation*             presentation_  = nullptr;
     DeviceConfig*                 config_        = nullptr;
     InstanceThreads*              threads_       = nullptr;
-    UserAlert*                    alert_         = nullptr;
-    NotificationStack*            notifications_ = nullptr;
     CalibrationRun*               run_           = nullptr;
     std::optional<DbLcdPanelSize> panel_;
 
-    mutable std::mutex ga_mutex_;
-    bool               ga_shown_       = false;
-    bool               stock_switched_ = false;
+    CallbackList<CalibrationTrigger> failure_listeners_;
 
     std::mutex                        mutex_;
     std::condition_variable           wake_;

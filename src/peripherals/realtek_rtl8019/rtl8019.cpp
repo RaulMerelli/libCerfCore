@@ -11,6 +11,7 @@
 #include "../../net/network_backend.h"
 #include <cerfcore/state/state_stream.h>
 
+#include <algorithm>
 #include <cstdio>
 #include <cstring>
 
@@ -113,7 +114,7 @@ void Rtl8019::WriteMacProm() {
 }
 
 std::string Rtl8019::ReceiverId() const {
-    return "ne2000:" + slot_->WidgetName();
+    return "ne2000:" + slot_->ObjectId();
 }
 
 void Rtl8019::OnInserted() {
@@ -371,13 +372,10 @@ void Rtl8019::WriteIo16(uint32_t card_io, uint16_t value) {
     nic_.IoWrite16Locked(offset, value);
 }
 
-std::string Rtl8019::TooltipDetail() const {
-    return std::string("Ethernet  ") + cerf::inet::FormatMac(guest_mac_.data()).s;
-}
-
-std::vector<WidgetControl> Rtl8019::CardControls() {
-    return {WidgetControl{
-        InfoControl{std::string("MAC  ") + cerf::inet::FormatMac(guest_mac_.data()).s}}};
+CardFacts Rtl8019::Facts() const {
+    NetworkCardFacts facts;
+    std::copy(guest_mac_.begin(), guest_mac_.end(), facts.mac);
+    return facts;
 }
 
 void Rtl8019::SaveState(StateWriter& w) {

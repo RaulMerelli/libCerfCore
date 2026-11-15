@@ -2,8 +2,8 @@
 
 #include <cerfcore/core/cerf_emulator.h>
 #include <cerfcore/core/log.h>
-#include <cerfcore/host/host_widget.h>
-#include <cerfcore/host/host_widget_registry.h>
+#include <cerfcore/host/machine_indicators.h>
+#include <cerfcore/host/machine_object_tree.h>
 #include "../../peripherals/peripheral_dispatcher.h"
 #include <cerfcore/socs/guest_cpu_reset.h>
 #include <cerfcore/state/state_stream.h>
@@ -33,16 +33,12 @@ constexpr uint8_t kOff   = 0u;
 constexpr uint8_t kOn     = 1u;
 constexpr uint8_t kBlink  = 2u;
 
-/* Fallback blink cadence (ticks on / off) when the driver set blink but left
-   the timing fields at zero. */
-constexpr uint32_t kDefaultBlinkTicks = 5u;  /* 500 ms */
+constexpr uint32_t kDefaultBlinkTicks = 5u;
+constexpr uint32_t kTickMs            = 100u;
 
-constexpr WidgetRgb kClrLit{78, 201, 90};
-constexpr WidgetRgb kClrDark{50, 55, 50};
-constexpr WidgetRgb kClrRimBlink{120, 230, 130};
-constexpr WidgetRgb kClrRim{90, 95, 90};
+constexpr ObjectRgb kLedColor{78, 201, 90};
 
-class SamsungSmdk2410NotificationLed : public Peripheral, public HostWidget {
+class SamsungSmdk2410NotificationLed : public Peripheral, public MachineLamp {
 public:
     using Peripheral::Peripheral;
 
@@ -56,7 +52,9 @@ public:
             regs_.fill(0u);
         });
         emu_.Get<PeripheralDispatcher>().Register(this);
-        emu_.Get<HostWidgetRegistry>().Register(this);
+        auto& tree = emu_.Get<MachineObjectTree>();
+        tree.Add(this);
+        tree.Add(&vibrator_, this);
     }
 
     uint32_t MmioBase() const override { return kBase; }
@@ -74,25 +72,44 @@ public:
         r.ReadBytes("regs", regs_.data(), regs_.size());
     }
 
-    /* HostWidget. The icon IS the LED state; no data path -> no RX/TX. */
-    std::string WidgetName() const override { return "Notification LED"; }
-    WidgetGroup Group() const override { return WidgetGroup::Indicator; }
-    std::string Tooltip() const override;
-    WidgetIcon  Icon() const override;
-    bool PollDirty() override;
+    std::string ObjectId() const override { return "notification_led"; }
+    static constexpr char kObjectName[] = "Notification LED";
+    std::string ObjectName() const override { return kObjectName; }
+    LampState   Lamp() const override;
 
 private:
+    class Vibrator final : public MachineVibrator {
+    public:
+        explicit Vibrator(SamsungSmdk2410NotificationLed& owner) : owner_(owner) {}
+        std::string ObjectId() const override { return "vibrator"; }
+        static constexpr char kObjectName[] = "Vibrator";
+        std::string ObjectName() const override { return kObjectName; }
+        bool        Vibrating() const override { return owner_.Mode(1) != kOff; }
+
+        using MachineVibrator::Refresh;
+
+    private:
+        SamsungSmdk2410NotificationLed& owner_;
+    };
+
     static const char* FieldName(uint32_t led_off);
+    uint8_t Mode(uint32_t led) const;
+    void    RefreshAll();
 
     mutable std::mutex                            state_mutex_;
     std::array<uint8_t, kNumLeds * kBytesPerLed>  regs_{};
-
-    /* UI-thread only: free-running tick + last-drawn appearance. */
-    uint32_t tick_           = 0;
-    bool     draw_led0_lit_  = false;
-    bool     draw_led0_blink_ = false;
-    bool     draw_vibrate_   = false;
+    Vibrator                                      vibrator_{*this};
 };
+
+uint8_t SamsungSmdk2410NotificationLed::Mode(uint32_t led) const {
+    std::lock_guard<std::mutex> lk(state_mutex_);
+    return regs_[led * kBytesPerLed + kFieldOnOffBlink];
+}
+
+void SamsungSmdk2410NotificationLed::RefreshAll() {
+    Refresh();
+    vibrator_.Refresh();
+}
 
 const char* SamsungSmdk2410NotificationLed::FieldName(uint32_t led_off) {
     switch (led_off) {
@@ -126,75 +143,29 @@ void SamsungSmdk2410NotificationLed::WriteByte(uint32_t addr, uint8_t value) {
     const uint32_t led_off = off % kBytesPerLed;
     LOG(Periph, "[NLED] write8 led=%u %s = 0x%02X\n",
         led, FieldName(led_off), value);
-    std::lock_guard<std::mutex> lk(state_mutex_);
-    if (off >= regs_.size()) {
-        HaltUnsupportedAccess("WriteByte", addr, value);  /* noreturn */
-    }
-    regs_[off] = value;
-}
-
-std::string SamsungSmdk2410NotificationLed::Tooltip() const {
-    uint8_t mode0, on0, off0, mode1;
     {
         std::lock_guard<std::mutex> lk(state_mutex_);
-        mode0 = regs_[kFieldOnOffBlink];
-        on0   = regs_[kFieldOnTime];
-        off0  = regs_[kFieldOffTime];
-        mode1 = regs_[kBytesPerLed + kFieldOnOffBlink];
-    }
-    char buf[128];
-    if (mode0 == kBlink) {
-        std::snprintf(buf, sizeof(buf), "Notification LED: blink (on %ums / off %ums) · Vibrate: %s",
-                      (unsigned)on0 * 100u, (unsigned)off0 * 100u,
-                      mode1 != kOff ? "on" : "off");
-    } else {
-        std::snprintf(buf, sizeof(buf), "Notification LED: %s · Vibrate: %s",
-                      mode0 == kOn ? "on" : "off",
-                      mode1 != kOff ? "on" : "off");
-    }
-    return buf;
-}
-
-WidgetIcon SamsungSmdk2410NotificationLed::Icon() const {
-    constexpr int r = 5;
-    return LedIcon{draw_led0_lit_ ? kClrLit : kClrDark,
-                   draw_led0_blink_ ? kClrRimBlink : kClrRim, r, draw_vibrate_};
-}
-
-bool SamsungSmdk2410NotificationLed::PollDirty() {
-    uint8_t mode0, on0, off0, mode1;
-    {
-        std::lock_guard<std::mutex> lk(state_mutex_);
-        mode0 = regs_[kFieldOnOffBlink];
-        on0   = regs_[kFieldOnTime];
-        off0  = regs_[kFieldOffTime];
-        mode1 = regs_[kBytesPerLed + kFieldOnOffBlink];
-    }
-    ++tick_;
-
-    bool led0_lit;
-    if (mode0 == kBlink) {
-        uint32_t on_ticks  = on0;
-        uint32_t off_ticks = off0;
-        if (on_ticks == 0 && off_ticks == 0) {
-            on_ticks = off_ticks = kDefaultBlinkTicks;
+        if (off >= regs_.size()) {
+            HaltUnsupportedAccess("WriteByte", addr, value);
         }
-        const uint32_t cycle = on_ticks + off_ticks;
-        led0_lit = cycle == 0 ? true : (tick_ % cycle) < on_ticks;
-    } else {
-        led0_lit = mode0 == kOn;
+        regs_[off] = value;
     }
-    const bool blink0   = mode0 == kBlink;
-    const bool vibrate  = mode1 != kOff;
+    RefreshAll();
+}
 
-    if (led0_lit == draw_led0_lit_ && blink0 == draw_led0_blink_ &&
-        vibrate == draw_vibrate_) {
-        return false;
+LampState SamsungSmdk2410NotificationLed::Lamp() const {
+    uint8_t mode0, on0, off0;
+    {
+        std::lock_guard<std::mutex> lk(state_mutex_);
+        mode0 = regs_[kFieldOnOffBlink];
+        on0   = regs_[kFieldOnTime];
+        off0  = regs_[kFieldOffTime];
     }
-    draw_led0_lit_   = led0_lit;
-    draw_led0_blink_ = blink0;
-    draw_vibrate_    = vibrate;
-    return true;
+    if (mode0 != kBlink) return LampState{mode0 == kOn, false, kLedColor};
+    uint32_t on_ticks  = on0;
+    uint32_t off_ticks = off0;
+    if (on_ticks == 0 && off_ticks == 0) on_ticks = off_ticks = kDefaultBlinkTicks;
+    return LampState{true, true, kLedColor, on_ticks * kTickMs, off_ticks * kTickMs};
 }
 
 }  /* namespace */

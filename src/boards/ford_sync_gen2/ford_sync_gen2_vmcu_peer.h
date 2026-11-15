@@ -1,6 +1,7 @@
 #pragma once
 
 #include <cerfcore/core/service.h>
+#include <cerfcore/host/machine_object.h>
 #include "../../socs/uart_endpoint.h"
 
 #include <array>
@@ -15,12 +16,17 @@ class Imx51Uart2;
 /* The SYNC2 companion processor (VMCU) on UART2. Without a peer answering the
    IPC LinkSetup handshake the head unit exhausts LinkSetupMaxRetry and
    watchdog-reboots. Wire codec + election RE'd from IPCMP.dll/ipc.dll. */
-class FordSyncGen2VmcuPeer : public Service, public UartEndpoint {
+class FordSyncGen2VmcuPeer : public Service, public UartEndpoint, public MachineObject {
 public:
     using Service::Service;
 
     bool ShouldRegister() override;
     void OnReady() override;
+
+    std::string       ObjectId() const override { return "vmcu"; }
+    static constexpr char kObjectName[] = "VMCU";
+    std::string       ObjectName() const override { return kObjectName; }
+    MachineObjectKind ObjectKind() const override { return MachineObjectKind::kVehicleController; }
 
     /* UartEndpoint: a guest UART2 TX byte (JIT thread). Detects the head's IPC
        message type and injects the matching reply. */

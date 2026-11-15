@@ -2,11 +2,10 @@
 
 #include <cerfcore/peripherals/peripheral_base.h>
 
-#include <cerfcore/host/host_widget.h>
+#include <cerfcore/host/machine_storage.h>
 
 #include <cstdint>
 #include <string>
-#include <vector>
 
 namespace cerfcore {
 
@@ -17,7 +16,7 @@ class StateReader;
    byte so single-byte (0xAA) and bus-doubled (0xAAAA) driver forms both work;
    mutations are applied to EmulatedMemory immediately (reads bypass this
    peripheral), so the guest's DQ-toggle poll reads stable data and completes. */
-class AmdCommandSetFlash : public Peripheral, public HostWidget {
+class AmdCommandSetFlash : public Peripheral, public MachineStorage {
 public:
     using Peripheral::Peripheral;
 
@@ -33,12 +32,9 @@ public:
     void SaveState(StateWriter& w) override;
     void RestoreState(StateReader& r) override;
 
-    /* HostWidget - generic NOR icon; concretes override the label/tooltip. */
-    std::string WidgetName() const override { return "NOR Flash"; }
-    WidgetGroup Group()      const override { return WidgetGroup::Storage; }
-    std::string Tooltip()    const override { return "NOR Flash"; }
-    std::vector<WidgetControl> Controls() override;
-    WidgetIcon  Icon()       const override { return ChipIcon{}; }
+    std::string   ObjectId() const override { return "nor_flash"; }
+    StorageMedium Medium() const override { return StorageMedium::kNorFlash; }
+    std::string   ImagePath() const override { return {}; }
 
 protected:
     /* 32-bit word returned at flash offset 0 while in autoselect mode:

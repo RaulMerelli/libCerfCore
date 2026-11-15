@@ -6,6 +6,7 @@
 #include <cerfcore/host/guest_power_notifier.h>
 #include "../execution/engine_bridge.h"
 #include <cerfcore/socs/guest_cpu_reset.h>
+#include <cerfcore/state/emulation_freeze.h>
 
 #include <utility>
 
@@ -24,6 +25,11 @@ void GuestColdBoot::RecordPatch(uint32_t pa, uint32_t len) {
     replays_.Add([this, pa, bytes = std::move(bytes)] {
         emu_.Get<EmulatedMemory>().CopyIn(pa, bytes.data(), bytes.size());
     });
+}
+
+void GuestColdBoot::RequestHardResetFromHost() {
+    auto frozen = emu_.Get<EmulationFreeze>().WorkerSection();
+    RequestHardReset();
 }
 
 void GuestColdBoot::RequestHardReset() {

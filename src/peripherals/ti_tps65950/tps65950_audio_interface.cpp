@@ -7,7 +7,7 @@
 #include <cerfcore/core/fatal.h>
 #include <cerfcore/core/instance_threads.h>
 #include <cerfcore/core/log.h>
-#include "../../host/audio_activity_widget.h"
+#include "../../host/audio_activity.h"
 #include <cerfcore/state/state_stream.h>
 #include "tps65950_audio_downlink.h"
 #include "tps65950_audio_uplink.h"
@@ -71,8 +71,8 @@ void Tps65950AudioInterface::OnReady() {
     downlink_   = &emu_.Get<Tps65950AudioDownlink>();
     hfclkin_hz_ = emu_.Get<Tps65950Board>().HfclkinHz();
     clock_->RegisterRateListener([this] { OnCpuRate(); });
-    host_.Start(emu_.Get<Fatal>(), emu_.Get<InstanceThreads>(), "Tps65950Audio", 0u, kChannels, kBits);
-    emu_.Get<AudioActivityWidget>().NotePresent();
+    host_.Start(emu_.Get<Fatal>(), emu_.Get<InstanceThreads>(), emu_.TryGet<AudioOutputs>(), "Tps65950Audio", 0u, kChannels, kBits);
+    emu_.Get<AudioActivity>().NotePresent();
 }
 
 void Tps65950AudioInterface::OnShutdown() { host_.Stop(); }
@@ -300,7 +300,7 @@ void Tps65950AudioInterface::Decode(const Omap3530McBspDxFrame& cur, const Omap3
     uint8_t frame[4];
     cerf::le::Put16(frame, static_cast<uint16_t>(out_left));
     cerf::le::Put16(frame + 2, static_cast<uint16_t>(out_right));
-    if (host_.QueueOutputInHostBlocks(frame, sizeof frame) != 0u) emu_.Get<AudioActivityWidget>().MarkTx();
+    if (host_.QueueOutputInHostBlocks(frame, sizeof frame) != 0u) emu_.Get<AudioActivity>().MarkTx();
 }
 
 /* TPS65950 TRM SWCU050E Figure 14-27 (page 717): right-justified TX words after the padding zeros; Figure 14-33

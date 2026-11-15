@@ -60,7 +60,7 @@ void CerfVirtResize::WriteWord(uint32_t addr, uint32_t value) {
                 emu_.Get<CerfVirtFramebuffer>().ApplyGuestMode(w, h, applied_quarter_.load());
             auto& presentation = emu_.Get<HostPresentation>();
             presentation.GuestRemoded(w, h);
-            if (turn != 0u) presentation.GuestTurned(turn);
+            if (turn != 0u) presentation.FrameTurned();
             break;
         }
         default:

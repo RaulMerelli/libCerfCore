@@ -110,6 +110,13 @@ bool CerfVirtFramebuffer::FrameFitsRegion(uint32_t offset, uint64_t frame_bytes)
     return uint64_t{offset} + frame_bytes <= region_bytes_;
 }
 
+void CerfVirtFramebuffer::MarkWritten(const uint8_t* at) {
+    if (visible_written_.load(std::memory_order_relaxed)) return;
+    const uintptr_t first = reinterpret_cast<uintptr_t>(bytes_) + ScanoutOffset();
+    const uintptr_t byte  = reinterpret_cast<uintptr_t>(at);
+    if (byte >= first && byte < first + SizeBytes()) visible_written_.store(true, std::memory_order_release);
+}
+
 void CerfVirtFramebuffer::SetScanoutOffset(uint32_t offset) {
     std::lock_guard<std::mutex> lock(mode_mu_);
     if (!FrameFitsRegion(offset, SizeBytes()))
@@ -146,7 +153,8 @@ uint32_t CerfVirtFramebuffer::ConfiguredDepth() const {
 void CerfVirtFramebuffer::LoadConfiguredPalette() {
     const uint32_t               bpp        = Bpp();
     const bool                   own_depth  = bpp == ConfiguredDepth();
-    const std::vector<uint32_t>& configured = emu_.Get<DeviceConfig>().guest_additions_palette;
+    const auto                   live       = emu_.Get<DeviceConfig>().Live();
+    const std::vector<uint32_t>& configured = live->guest_additions_palette;
     if (bpp > 8u) {
         if (own_depth && !configured.empty())
             emu_.Get<Fatal>().UserError("[CerfVirtFramebuffer] an indexed palette is set for the %u bpp "
@@ -167,8 +175,8 @@ void CerfVirtFramebuffer::LoadConfiguredPalette() {
 }
 
 void CerfVirtFramebuffer::OnReady() {
-    const auto& cfg = emu_.Get<DeviceConfig>();
-    StoreGeometry(cfg.board_configurable_screen_width, cfg.board_configurable_screen_height);
+    const auto live = emu_.Get<DeviceConfig>().Live();
+    StoreGeometry(live->board_configurable_screen_width, live->board_configurable_screen_height);
     bpp_.store(ConfiguredDepth(), std::memory_order_release);
     LoadConfiguredPalette();
     region_bytes_ = ComputeRegionBytes();
@@ -211,7 +219,7 @@ void CerfVirtFramebuffer::SaveState(StateWriter& w) {
     w.Write("quarter", Quarter());
     w.Write("primary_reserve", PrimaryReserveBytes());
     w.Write("scanout_offset", scanout);
-    w.Write<uint8_t>("any_write", any_write_ ? 1u : 0u);
+    w.Write<uint8_t>("visible_written", HasContent() ? 1u : 0u);
     for (uint32_t i = 0; i < 256u; ++i) w.Write("palette", palette_[i]);
     std::vector<uint8_t> pages;
     TouchedPages(pages);
@@ -232,7 +240,7 @@ void CerfVirtFramebuffer::RestoreState(StateReader& r) {
     r.Read("quarter", quarter);
     uint32_t reserve = 0;
     r.Read("primary_reserve", reserve);
-    quarter_.store(quarter, std::memory_order_release);
+    const bool turned = TurnTo(quarter) != 0u;
     primary_reserve_.store(reserve, std::memory_order_release);
     uint32_t scanout = 0;
     r.Read("scanout_offset", scanout);
@@ -241,9 +249,9 @@ void CerfVirtFramebuffer::RestoreState(StateReader& r) {
         StoreGeometry(w, h);
         scanout_.store(scanout, std::memory_order_release);
     }
-    uint8_t aw = 0;
-    r.Read("any_write", aw);
-    any_write_ = (aw != 0);
+    uint8_t written = 0;
+    r.Read("visible_written", written);
+    visible_written_.store(written != 0, std::memory_order_release);
     for (uint32_t i = 0; i < 256u; ++i) r.Read("palette", palette_[i]);
     std::vector<uint8_t> saved((PageCount() + 7u) >> 3u, 0u);
     r.ReadBytes("saved_pages", saved.data(), saved.size());
@@ -254,6 +262,7 @@ void CerfVirtFramebuffer::RestoreState(StateReader& r) {
     for (uint32_t page = 0; page < PageCount(); ++page)
         if ((saved[page >> 3u] >> (page & 7u)) & 1u)
             r.ReadBytes("page", bytes_ + (size_t{page} << kPageShift), kPageBytes);
+    if (turned) emu_.Get<HostPresentation>().FrameTurned();
 }
 
 void CerfVirtFramebuffer::TouchedPages(std::vector<uint8_t>& bitmap) {
@@ -273,7 +282,7 @@ void CerfVirtFramebuffer::ClearContent() {
     std::vector<uint8_t> pages;
     TouchedPages(pages);
     ZeroPages(pages);
-    any_write_ = false;
+    visible_written_.store(false, std::memory_order_release);
 }
 
 void CerfVirtFramebuffer::ReapplyConfiguredDepth() {
@@ -351,7 +360,7 @@ void CerfVirtFramebuffer::TurnBackForReset() {
     const uint32_t turn = TurnTo(0u);
     if (turn == 0u) return;
     LOG(Periph, "[CerfVirtFramebuffer] reset turned the display back by %u quarter turns\n", turn);
-    emu_.Get<HostPresentation>().GuestTurned(turn);
+    emu_.Get<HostPresentation>().FrameTurned();
 }
 
 }

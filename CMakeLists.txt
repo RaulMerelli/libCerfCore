@@ -95,15 +95,11 @@ endif()
 
 if(WIN32)
     target_compile_definitions(cerfcore PUBLIC UNICODE _UNICODE)
-    target_link_libraries(cerfcore PUBLIC ws2_32 iphlpapi winmm psapi dbghelp user32 advapi32)
+    target_link_libraries(cerfcore PUBLIC ws2_32 iphlpapi psapi dbghelp user32 advapi32)
 elseif(ANDROID)
-    target_link_libraries(cerfcore PRIVATE aaudio android)
-elseif(CMAKE_SYSTEM_NAME STREQUAL "Linux")
-    find_package(ALSA REQUIRED)
-    target_link_libraries(cerfcore PRIVATE ALSA::ALSA)
+    target_link_libraries(cerfcore PRIVATE android)
 elseif(APPLE)
-    target_link_libraries(cerfcore PUBLIC "-framework AudioToolbox" "-framework CoreAudio"
-                                          "-framework CoreFoundation" "-framework IOKit")
+    target_link_libraries(cerfcore PUBLIC "-framework CoreFoundation" "-framework IOKit")
 endif()
 
 if(MSVC)

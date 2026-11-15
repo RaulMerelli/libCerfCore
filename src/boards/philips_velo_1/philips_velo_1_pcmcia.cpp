@@ -10,13 +10,16 @@ namespace cerfcore {
 
 namespace {
 
+constexpr char kPcCardSlotId[]    = "pc_card_slot";
+constexpr char kPcCardSlotLabel[] = "PC Card slot";
+
 /* CRDDET1 and CRDDET2 are the two card-detect pins of one 16-bit PC Card socket
    (it8368.c:419 treats either as "no card"), and only the Card 1 windows are ever
    mapped: nk.1.exe sub_9FB2B1E4 maps $6400_0000 and sub_9FB2B054 maps $0800_0000. */
 class PhilipsVelo1Pcmcia : public IteIt8368SocketHost {
 public:
     explicit PhilipsVelo1Pcmcia(CerfEmulator& emu)
-        : IteIt8368SocketHost(emu, "PC Card slot") {}
+        : IteIt8368SocketHost(emu, {kPcCardSlotId, kPcCardSlotLabel}) {}
 
     bool ShouldRegister() override {
         auto* bd = emu_.TryGet<BoardContext>();

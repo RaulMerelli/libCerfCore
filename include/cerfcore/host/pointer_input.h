@@ -23,8 +23,9 @@ public:
     void OnCaptureLost();
     void ReleaseHeld(const HostPointerInputLock::Hold& hold);
 
-    std::string    SourceName()       const override { return "Guest Additions mouse"; }
-    const char*    IconResourceName() const override { return "ga_cursor"; }
+    static constexpr char kSourceName[] = "Guest Additions mouse";
+    std::string    SourceId()         const override { return "guest_additions_pointer"; }
+    std::string    SourceName()       const override { return kSourceName; }
     int            SourcePriority()   const override { return 100; }
     PointerKind    Kind()             const override { return PointerKind::Absolute; }
 

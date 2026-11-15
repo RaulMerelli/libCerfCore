@@ -20,7 +20,7 @@ class TiCardbusBoard;
 
 class Pci1225SocketFunction : public PciDevice, public PcmciaSlotHost {
 public:
-    Pci1225SocketFunction(CerfEmulator& emu, uint8_t function, const char* slot_label,
+    Pci1225SocketFunction(CerfEmulator& emu, uint8_t function, const ObjectIdentity& slot,
                           Pci1225SharedConfig& shared, std::mutex& mtx, ExcaSocketSequencer& sequencer);
 
     void Attach(TiCardbusBoard& board, Pci1225SocketFunction& peer, Pci1225LegacyPort* legacy);

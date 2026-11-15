@@ -1,11 +1,9 @@
 #pragma once
 
 #include "../pcmcia/pcmcia_card.h"
-#include <cerfcore/host/external_display.h>
 #include "vga_controller.h"
 
 #include <cstdint>
-#include <memory>
 
 namespace cerfcore {
 
@@ -19,7 +17,6 @@ public:
     std::string DisplayName() const override { return kDisplayName; }
     PcmciaVoltageSense VoltageSense() const override { return { false, false, false }; }
     bool HoldsReadyBusyInReset() const override { return false; }
-    const char* IconResource() const override { return "pcmcia_enabled_vga"; }
 
     void OnInserted() override;
     void OnShutdown() override;
@@ -47,7 +44,8 @@ public:
     bool     InputAcknowledge(uint32_t)                      override { return false; }
 
 private:
-    void SyncWindowToMode();
+    void SyncDisplayToMode();
+    void DetachDisplay();
 
     static constexpr uint32_t kRegEnd    = 0x0046E9u;
     static constexpr uint32_t kMagicBase = 0x0C0000u;
@@ -56,7 +54,7 @@ private:
     [[noreturn]] void HaltUnmapped(const char* space, const char* access, uint32_t offset);
 
     VgaController controller_;
-    std::unique_ptr<ExternalDisplay> window_;
+    int           display_id_ = 0;
 
     uint32_t last_w_ = 0, last_h_ = 0;
 };

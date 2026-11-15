@@ -17,6 +17,9 @@ namespace cerfcore {
 
 namespace {
 
+constexpr char kSerialPortId[]    = "serial_port";
+constexpr char kSerialPortLabel[] = "Serial port";
+
 constexpr uint8_t kPortScDriverPowerOff = 0x08u;
 constexpr uint8_t kPortScRtsOff         = 0x40u;
 constexpr uint8_t kPortHDtrOff          = 0x80u;
@@ -36,8 +39,9 @@ public:
         TrackNets();
     }
 
-    std::string CradleLabel(uint32_t channel_base) const override {
-        return channel_base == kSh77xxScif2Base ? "Serial port" : std::string();
+    std::optional<ObjectIdentity> Cradle(uint32_t channel_base) const override {
+        if (channel_base != kSh77xxScif2Base) return std::nullopt;
+        return ObjectIdentity{kSerialPortId, kSerialPortLabel};
     }
 
     bool DriverPowered(uint32_t channel_base) const override {

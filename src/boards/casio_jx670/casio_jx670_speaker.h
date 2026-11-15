@@ -7,7 +7,7 @@
 
 namespace cerfcore {
 
-class AudioActivityWidget;
+class AudioActivity;
 class EmulatedMemory;
 
 class CasioJx670Speaker : public Service {
@@ -27,7 +27,7 @@ public:
 private:
     PacedWaveOut         paced_;
     EmulatedMemory*      mem_      = nullptr;
-    AudioActivityWidget* activity_ = nullptr;
+    AudioActivity* activity_ = nullptr;
 };
 
 }

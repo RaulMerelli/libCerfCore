@@ -20,7 +20,7 @@ void Rcvdl56dpflDataPumpPeripheral::StartDataPump(const Rcvdl56dpflSelfTest& sel
     requests_->RegisterListener([this] { pump_.ServiceHostData(); });
     emu_.Get<Hibernation>().RegisterPreSaveListener([this] { pump_.ServiceHostData(); });
     phone_.SetWake([this] { requests_->Request(); });
-    phone_.RegisterWidget();
+    phone_.AddToTree();
 }
 
 void Rcvdl56dpflDataPumpPeripheral::OnShutdown() {

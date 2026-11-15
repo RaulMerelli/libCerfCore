@@ -23,12 +23,15 @@ public:
     HostSerialForward(std::string host_port, CerfEmulator& emu);
     ~HostSerialForward() override;
 
-    void SetOnBridgeDead(std::function<void()> cb) { on_dead_ = std::move(cb); }
+    using DeadCallback = std::function<void(const char* reason, uint32_t code)>;
+
+    void SetOnBridgeDead(DeadCallback cb) { on_dead_ = std::move(cb); }
 
     void OnGuestTx(const uint8_t* data, size_t n) override;
     void OnControlLines(bool dtr, bool rts) override;
     void OnOpen()  override;
     void OnClose() override;
+    void StopHostIo() override;
     void ResendModemInputs() override;
     void PostRestore() override;
 
@@ -36,8 +39,7 @@ private:
     void ReaderLoop();
     void WriterLoop();
     void ApplyLineConfig(const SerialLine::LineConfig& c);
-    void StopThreads();
-    void ReportDead(const std::string& detail);
+    void ReportDead(const char* reason, uint32_t code);
 
     bool WithGuestAccess(const std::function<void()>& touch);
 
@@ -47,7 +49,7 @@ private:
     std::atomic<bool>           running_{false};
     std::atomic<bool>           dead_{false};
 
-    std::function<void()> on_dead_;
+    DeadCallback on_dead_;
 
     std::thread reader_;
     std::thread writer_;

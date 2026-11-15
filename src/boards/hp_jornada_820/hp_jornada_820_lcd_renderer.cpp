@@ -7,7 +7,7 @@
 #include <cerfcore/core/byte_order.h>
 #include <cerfcore/core/cerf_emulator.h>
 #include <cerfcore/cpu/emulated_memory.h>
-#include <cerfcore/host/panel_frame_renderer.h>
+#include "../../host/panel_frame_renderer.h"
 #include <cerfcore/lcd/lcd_pixel_expand.h>
 
 #include <cstring>
@@ -41,14 +41,7 @@ public:
     bool HasFrame() override {
         auto& lcd = emu_.Get<Sa11xxLcd>();
         if (!lcd.IsEnabled())  return false;
-        if (latch_.Latched())  return true;
-        const uint32_t dbar1   = lcd.GetFbPa();
-        const uint32_t guest_w = lcd.GetGuestW();
-        const uint32_t guest_h = lcd.GetGuestH();
-        if (dbar1 == 0 || guest_w == 0 || guest_h == 0) return false;
-        const size_t upper_bytes = (size_t)guest_w * (guest_h / 2u);
-        return latch_.ProbeAndLatch(emu_.Get<EmulatedMemory>(),
-                                    dbar1 + kPaletteBytes, upper_bytes);
+        return lcd.GetFbPa() != 0 && lcd.GetGuestW() != 0 && lcd.GetGuestH() != 0;
     }
 
     void RenderInto(uint32_t* dib_bgra32,

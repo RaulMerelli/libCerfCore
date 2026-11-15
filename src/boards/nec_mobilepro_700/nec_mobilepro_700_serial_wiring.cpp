@@ -8,6 +8,9 @@ namespace cerfcore {
 
 namespace {
 
+constexpr char kSerialPortId[]    = "serial_port";
+constexpr char kSerialPortLabel[] = "COM1";
+
 class NecMobilepro700SerialWiring : public Vr41xxGpioSuppliedSerialWiring {
 public:
     using Vr41xxGpioSuppliedSerialWiring::Vr41xxGpioSuppliedSerialWiring;
@@ -17,7 +20,7 @@ public:
     }
 
     std::optional<Vr41xxSerialModem> ForSiu() const override {
-        return Vr41xxSerialModem("COM1", 5);
+        return Vr41xxSerialModem({kSerialPortId, kSerialPortLabel}, 5);
     }
 
 protected:

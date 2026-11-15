@@ -2,9 +2,11 @@
 
 #include <cerfcore/core/service.h>
 
-#include "../../host/battery_widget.h"
+#include <cerfcore/host/battery.h>
 
 #include <cstdint>
+#include <functional>
+#include <utility>
 
 namespace cerfcore {
 
@@ -21,11 +23,12 @@ public:
     bool     Charging() const;
     bool     OnExternalPower() const;
     uint16_t MainBatteryAdc() const;
+    void     AddChangeListener(std::function<void()> cb) { battery_.AddChangeListener(std::move(cb)); }
 
 private:
     void DriveAcLine();
 
-    BatteryWidget          battery_;
+    Battery                battery_{emu_};
     Hp600InputNets*        nets_    = nullptr;
     Hp600MainBatteryScale* scale_   = nullptr;
 };

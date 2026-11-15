@@ -4,7 +4,7 @@
 #include <cerfcore/core/instance_threads.h>
 #include <cerfcore/boards/board_context.h>
 #include "../../boards/hp_jornada_700/hp_jornada_700_family_id.h"
-#include "../../host/audio_activity_widget.h"
+#include "../../host/audio_activity.h"
 #include "../../execution/guest_cycle_clock.h"
 
 #include <cstring>
@@ -26,7 +26,7 @@ bool Sa1111SacHostInput::ShouldRegister() {
 }
 
 void Sa1111SacHostInput::OnReady() {
-    mic_.Start(emu_.Get<InstanceThreads>(), "Sa1111SacCapture", kMicFifoBytes);
+    mic_.Start(emu_.Get<InstanceThreads>(), emu_.TryGet<AudioInputs>(), "Sa1111SacCapture", kMicFifoBytes);
 }
 
 void Sa1111SacHostInput::OnShutdown() { mic_.Stop(); }
@@ -42,7 +42,7 @@ void Sa1111SacHostInput::Take(uint8_t* dst, uint32_t words) {
         return;
     }
     mic_.Request(rate_, kChannels, kBitsPerSample);
-    if (mic_.Take(dst, kWordBytes * words) != 0u) emu_.Get<AudioActivityWidget>().MarkRx();
+    if (mic_.Take(dst, kWordBytes * words) != 0u) emu_.Get<AudioActivity>().MarkRx();
 }
 
 void Sa1111SacHostInput::Clear() { mic_.Clear(); }

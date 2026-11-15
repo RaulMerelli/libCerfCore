@@ -5,7 +5,7 @@
 #include <cerfcore/boards/board_context.h>
 #include "nec_mobilepro_700_family_id.h"
 #include <cerfcore/core/cerf_emulator.h>
-#include <cerfcore/host/panel_frame_renderer.h>
+#include "../../host/panel_frame_renderer.h"
 #include "../../lcd/panel_scanout.h"
 
 namespace cerfcore {
@@ -29,10 +29,7 @@ public:
 
     bool HasFrame() override {
         auto& lcd = emu_.Get<NecMobilepro700Lcd>();
-        if (!lcd.IsEnabled())  return false;
-        if (latch_.Latched())  return true;
-        const uint32_t bytes = lcd.StrideBytes() * lcd.GuestH();
-        return latch_.ProbeAndLatch(lcd.FbBytes(), bytes);
+        return lcd.IsEnabled();
     }
 
     void RenderInto(uint32_t* dib, uint32_t host_w, uint32_t host_h) override {

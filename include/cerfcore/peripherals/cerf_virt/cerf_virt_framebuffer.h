@@ -34,7 +34,7 @@ public:
     uint32_t Stride()   const;
     uint32_t SizeBytes()const;
     uint32_t Quarter()  const { return quarter_.load(std::memory_order_acquire); }
-    bool     HasContent() const { return any_write_; }
+    bool     HasContent() const { return visible_written_.load(std::memory_order_acquire); }
 
     uint32_t RegionBytes() const { return region_bytes_; }
 
@@ -53,9 +53,7 @@ public:
     uint32_t PaletteEntry(uint32_t idx) const { return idx < 256u ? palette_[idx] : 0u; }
     const uint32_t* Palette() const { return palette_; }
 
-    void MarkDirty() { any_write_ = true; }
-
-    void ClearContentEdge() { any_write_ = false; }
+    void MarkWritten(const uint8_t* at);
 
     void ClearContent();
 
@@ -102,7 +100,7 @@ private:
     uint32_t region_bytes_= 0;
     std::atomic<uint32_t> primary_reserve_{0};
     mutable std::mutex    mode_mu_;
-    bool     any_write_   = false;
+    std::atomic<bool>     visible_written_{false};
 };
 
 }

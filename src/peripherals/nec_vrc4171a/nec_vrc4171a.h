@@ -50,7 +50,7 @@ protected:
     void        AfterRestoreLocked() override;
 
 private:
-    std::optional<std::string> SlotBLabel();
+    std::optional<ObjectIdentity> SlotB();
     void     ApplyChipModesLocked();
     uint16_t InterruptStatusLocked();
 

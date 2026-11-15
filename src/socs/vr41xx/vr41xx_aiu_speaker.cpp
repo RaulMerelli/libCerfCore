@@ -6,7 +6,7 @@
 #include <cerfcore/core/instance_threads.h>
 #include <cerfcore/cpu/emulated_memory.h>
 #include <cerfcore/state/state_stream.h>
-#include "../../host/audio_activity_widget.h"
+#include "../../host/audio_activity.h"
 #include "vr41xx_audio_switch.h"
 #include "vr41xx_dcu.h"
 
@@ -34,8 +34,8 @@ void Vr41xxAiuSpeaker::AttachHost() {
     Attach();
     switch_    = &emu_.Get<Vr41xxAudioSwitch>();
     switch_on_ = switch_->SpeakerOn();
-    paced_.Start(emu_.Get<Fatal>(), emu_.Get<InstanceThreads>(), "Vr41xxAiu", 0, 1, 16);
-    emu_.Get<AudioActivityWidget>().NotePresent();
+    paced_.Start(emu_.Get<Fatal>(), emu_.Get<InstanceThreads>(), emu_.TryGet<AudioOutputs>(), "Vr41xxAiu", 0, 1, 16);
+    emu_.Get<AudioActivity>().NotePresent();
 }
 
 void Vr41xxAiuSpeaker::StopHost() { paced_.Stop(); }
@@ -125,7 +125,7 @@ void Vr41xxAiuSpeaker::FinishCatchUp() { FlushHost(); }
 
 void Vr41xxAiuSpeaker::FlushHost() {
     if (out_.empty()) return;
-    emu_.Get<AudioActivityWidget>().MarkTx();
+    emu_.Get<AudioActivity>().MarkTx();
     paced_.QueueOutputInHostBlocks(out_.data(), static_cast<uint32_t>(out_.size()));
     out_.clear();
 }

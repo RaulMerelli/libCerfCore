@@ -24,7 +24,7 @@ void PcmciaAutoInsert::InsertDefaultNetworkCard(PcmciaSlot& slot) {
     const auto& cfg = emu_.Get<DeviceConfig>();
     if (cfg.guest_additions && cfg.network_enabled) {
         LOG(Net, "PcmciaAutoInsert: guest additions provide the NIC; leaving "
-                 "'%s' empty\n", slot.WidgetName().c_str());
+                 "'%s' empty\n", slot.ObjectName().c_str());
         return;
     }
 
@@ -32,12 +32,12 @@ void PcmciaAutoInsert::InsertDefaultNetworkCard(PcmciaSlot& slot) {
     uint16_t major = 0, minor = 0;
     if (!rom || !rom->KernelSubsystemVersion(major, minor)) {
         LOG(Net, "PcmciaAutoInsert: guest kernel version unavailable; "
-                 "leaving '%s' empty\n", slot.WidgetName().c_str());
+                 "leaving '%s' empty\n", slot.ObjectName().c_str());
         return;
     }
     if (major < 4) {
         LOG(Net, "PcmciaAutoInsert: guest kernel is CE %u.%u; leaving "
-                 "'%s' empty\n", major, minor, slot.WidgetName().c_str());
+                 "'%s' empty\n", major, minor, slot.ObjectName().c_str());
         return;
     }
 
@@ -60,7 +60,7 @@ void PcmciaAutoInsert::InsertLaunchCompactFlash(PcmciaSlot& slot) {
 
         slot.InsertCard(std::make_unique<CompactFlashCard>(emu_, path));
         LOG(Periph, "PcmciaAutoInsert: inserted launch CF '%s' into '%s'\n",
-            card.name.c_str(), slot.WidgetName().c_str());
+            card.name.c_str(), slot.ObjectName().c_str());
         return;
     }
 }

@@ -6,6 +6,7 @@
 #include <cerfcore/core/cerf_emulator.h>
 #include <cerfcore/core/fatal.h>
 #include <cerfcore/core/log.h>
+#include <cerfcore/host/external_displays.h>
 #include <cerfcore/state/state_stream.h>
 
 namespace cerfcore {
@@ -98,21 +99,24 @@ bool IsDetectProbeWrite(uint32_t offset, uint8_t value) {
 }  /* namespace */
 
 HpF1252aCard::HpF1252aCard(CerfEmulator& emu) : PcmciaCard(emu), controller_(emu) {}
-HpF1252aCard::~HpF1252aCard() { if (window_) window_->Close(); }
+HpF1252aCard::~HpF1252aCard() { DetachDisplay(); }
 
 void HpF1252aCard::OnInserted() {
     controller_.Attach();
     PcmciaSlot*    slot = slot_;
     const uint64_t id   = card_id_;
-    window_ = emu_.Get<ExternalDisplayFactory>().Create(
-        controller_, kDisplayName, [slot, id] { slot->EjectCardIfResident(id); });
-    window_->Open(640u, 480u);
+    display_id_ = emu_.Get<ExternalDisplays>().Attach(controller_, kDisplayName, 640u, 480u,
+                                                      [slot, id] { slot->EjectCardIfResident(id); });
     last_w_ = 640u;
     last_h_ = 480u;
 }
 
-void HpF1252aCard::OnShutdown() {
-    if (window_) window_->Close();
+void HpF1252aCard::OnShutdown() { DetachDisplay(); }
+
+void HpF1252aCard::DetachDisplay() {
+    if (display_id_ == 0) return;
+    emu_.Get<ExternalDisplays>().Detach(display_id_);
+    display_id_ = 0;
 }
 
 void HpF1252aCard::PowerOn() {
@@ -127,13 +131,13 @@ void HpF1252aCard::PowerOff() {
 #endif
 }
 
-void HpF1252aCard::SyncWindowToMode() {
+void HpF1252aCard::SyncDisplayToMode() {
     uint32_t w, h, bpp;
     if (!controller_.CurrentMode(w, h, bpp)) return;
     if (w == last_w_ && h == last_h_) return;
     last_w_ = w;
     last_h_ = h;
-    if (window_) window_->SetSurfaceSize(w, h);
+    emu_.Get<ExternalDisplays>().Resize(display_id_, w, h);
     LOG(Lcd, "[HpVga] mode %ux%u %ubpp\n", w, h, bpp);
 }
 
@@ -167,7 +171,7 @@ void HpF1252aCard::WriteCommon8(uint32_t offset, uint8_t value) {
     if (offset < kRegEnd) {
         if (IsDetectProbeWrite(offset, value)) return;
         controller_.WriteReg8(offset, value);
-        SyncWindowToMode();
+        SyncDisplayToMode();
         return;
     }
     uint32_t at = 0u;
@@ -190,20 +194,15 @@ uint16_t HpF1252aCard::ReadCommon16(uint32_t offset) {
     return static_cast<uint16_t>(even | (odd << 8));
 }
 
-/* window_ is the host external-display window (re-derived from the restored
-   mode); the VGA register file + framebuffer is the card state. */
 void HpF1252aCard::SaveState(StateWriter& w) {
     controller_.SaveState(w);
 }
 
 void HpF1252aCard::RestoreState(StateReader& r) {
     controller_.RestoreState(r);
-    /* last_w_/last_h_ is the window-resize dedup cache, not guest state.
-       OnInserted opened the window at the boot-default 640x480; reset the
-       cache so SyncWindowToMode re-applies the restored mode to it. */
     last_w_ = 0;
     last_h_ = 0;
-    SyncWindowToMode();
+    SyncDisplayToMode();
 }
 
 void HpF1252aCard::WriteCommon16(uint32_t offset, uint16_t value) {

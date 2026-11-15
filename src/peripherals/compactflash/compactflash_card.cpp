@@ -7,12 +7,15 @@
 #include <cerfcore/platform/host_path_name.h>
 #include <cerfcore/state/state_stream.h>
 
+#include <cstdio>
+
 namespace cerfcore {
 
 namespace {
 
 constexpr uint64_t kSectorsPerMegabyte    = 2048u;
 constexpr uint8_t  kDriveAddressUnknownBit = 0x80u;
+constexpr char     kImageNameFormat[]      = "CompactFlash (%s)";
 
 }
 
@@ -23,12 +26,15 @@ CompactFlashCard::CompactFlashCard(CerfEmulator& emu, std::string image_path)
 CompactFlashCard::~CompactFlashCard() = default;
 
 std::string CompactFlashCard::DisplayName() const {
-    return "CompactFlash (" + image_name_ + ")";
+    std::string name(image_name_.size() + sizeof(kImageNameFormat), '\0');
+    name.resize(static_cast<size_t>(
+        std::snprintf(name.data(), name.size(), kImageNameFormat, image_name_.c_str())));
+    return name;
 }
 
-std::string CompactFlashCard::TooltipDetail() const {
-    if (!ata_.MediaOpen()) return DisplayName() + " - image not found";
-    return DisplayName() + " - " + std::to_string(ata_.TotalSectors() / kSectorsPerMegabyte) + " MB";
+CardFacts CompactFlashCard::Facts() const {
+    const uint64_t sectors = ata_.MediaOpen() ? ata_.TotalSectors() : 0u;
+    return StorageCardFacts{image_path_, sectors * (uint64_t{1} << 20) / kSectorsPerMegabyte};
 }
 
 void CompactFlashCard::PowerOn() {

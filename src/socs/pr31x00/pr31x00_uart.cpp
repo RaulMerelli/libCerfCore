@@ -114,9 +114,9 @@ void Pr31x00Uart::OnReady() {
 
     SetModemInputs(false, false, false, false);
 
-    port_.AttachCradle(emu_, modem_->label);
+    port_.AttachCradle(emu_, modem_->port);
     LOG(Periph, "[UART] %s attached as serial endpoint line '%s'\n",
-        TxSource(), modem_->label.c_str());
+        TxSource(), modem_->port.name.c_str());
 }
 
 Pr31x00Uart::Pr31x00Uart(CerfEmulator& emu)

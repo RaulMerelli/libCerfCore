@@ -3,7 +3,7 @@
 #include <cerfcore/core/cerf_emulator.h>
 #include <cerfcore/core/log.h>
 #include <cerfcore/cpu/emulated_memory.h>
-#include <cerfcore/host/host_widget_registry.h>
+#include <cerfcore/host/machine_object_tree.h>
 #include "peripheral_dispatcher.h"
 #include <cerfcore/state/state_stream.h>
 
@@ -19,10 +19,10 @@ constexpr uint32_t kCmdAddrMask = 0xFFEu;
 void AmdCommandSetFlash::OnReady() {
     (void)emu_.Get<EmulatedMemory>().Translate(MmioBase());
     emu_.Get<PeripheralDispatcher>().Register(this);
-    emu_.Get<HostWidgetRegistry>().Register(this);
+    emu_.Get<MachineObjectTree>().Add(this);
     LOG(Boot, "AmdCommandSetFlash: %s at PA 0x%08X size 0x%X "
               "(EmulatedMemory-backed; FSM-write only)\n",
-        WidgetName().c_str(), MmioBase(), MmioSize());
+        ObjectName().c_str(), MmioBase(), MmioSize());
 }
 
 uint8_t  AmdCommandSetFlash::ReadByte(uint32_t addr) {
@@ -146,10 +146,6 @@ void AmdCommandSetFlash::RestoreState(StateReader& r) {
     uint8_t st = 0; r.Read("st", st); st_ = (St)st;
     uint8_t byp = 0; r.Read("bypass", byp); bypass_ = (byp != 0);
     r.Read("cached_word0", cached_word0_);
-}
-
-std::vector<WidgetControl> AmdCommandSetFlash::Controls() {
-    return {WidgetControl{InfoControl{Tooltip()}}};
 }
 
 }

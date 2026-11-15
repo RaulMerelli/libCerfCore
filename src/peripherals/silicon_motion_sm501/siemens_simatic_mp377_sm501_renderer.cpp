@@ -9,7 +9,7 @@
 #include <cerfcore/core/byte_order.h>
 #include <cerfcore/core/cerf_emulator.h>
 #include <cerfcore/host/frame_renderer.h>
-#include <cerfcore/host/panel_frame_renderer.h>
+#include "../../host/panel_frame_renderer.h"
 #include <cerfcore/lcd/lcd_pixel_expand.h>
 
 #include <algorithm>
@@ -44,12 +44,7 @@ public:
     void OnReady() override { BuildRgb565ToXrgbLut(rgb565_to_xrgb_); }
 
     bool HasFrame() override {
-        if (latch_.Latched()) return true;
-        auto& video = emu_.Get<siemens_simatic_mp377::SiemensSimaticMp377Sm501Video>();
-        const auto scanout = ResolveScanout(video);
-        if (!scanout) return false;
-        const size_t bytes = static_cast<size_t>(scanout->pitch) * scanout->height;
-        return latch_.ProbeAndLatch(video.Vram() + scanout->offset, bytes);
+        return ResolveScanout(emu_.Get<siemens_simatic_mp377::SiemensSimaticMp377Sm501Video>()).has_value();
     }
 
     void RenderInto(uint32_t* dib, uint32_t host_w, uint32_t host_h) override {

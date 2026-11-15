@@ -10,7 +10,6 @@
 | [PCRE2](https://github.com/PCRE2Project/pcre2) | BSD-3-Clause |
 | [GNU libiconv](https://www.gnu.org/software/libiconv/) | LGPL-2.1-or-later, used under LGPL-3.0 |
 | [GNU gettext (libintl)](https://www.gnu.org/software/gettext/) | LGPL-2.1-or-later, used under LGPL-3.0 |
-| [alsa-lib](https://www.alsa-project.org/) | LGPL-2.1-or-later, used under LGPL-3.0 |
 
 ## Studied references
 

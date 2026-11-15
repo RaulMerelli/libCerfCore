@@ -10,7 +10,7 @@
 #include <cerfcore/boards/board_context.h>
 #include <cerfcore/core/cerf_emulator.h>
 #include <cerfcore/core/fatal.h>
-#include <cerfcore/host/host_widget_registry.h>
+#include <cerfcore/host/machine_object_tree.h>
 #include <cerfcore/socs/guest_cpu_reset.h>
 
 #include <mutex>
@@ -19,13 +19,18 @@ namespace cerfcore {
 
 namespace {
 
+constexpr char kSocketAId[]    = "pc_card_slot_1";
+constexpr char kSocketALabel[] = "PCMCIA #1";
+constexpr char kSocketBId[]    = "pc_card_slot_2";
+constexpr char kSocketBLabel[] = "PCMCIA #2";
+
 class TiCardbusBridge : public Service, public Pci1225LegacyPortOwner {
 public:
     explicit TiCardbusBridge(CerfEmulator& emu)
         : Service(emu),
           legacy_(shared_, mtx_, *this),
-          socket_a_(emu, 0u, "PCMCIA #1", shared_, mtx_, sequencer_),
-          socket_b_(emu, 1u, "PCMCIA #2", shared_, mtx_, sequencer_) {}
+          socket_a_(emu, 0u, {kSocketAId, kSocketALabel}, shared_, mtx_, sequencer_),
+          socket_b_(emu, 1u, {kSocketBId, kSocketBLabel}, shared_, mtx_, sequencer_) {}
 
     bool ShouldRegister() override {
         return emu_.Get<BoardContext>().GetBoardFamilyId() == BoardFamilyId::NecSg2Vr5500;
@@ -45,7 +50,7 @@ public:
             RedetectCards();
             UpdateLines();
         });
-        emu_.Get<HostWidgetRegistry>().Register(&socket_a_.Slot());
+        emu_.Get<MachineObjectTree>().Add(&socket_a_.Slot());
         sequencer_.Run([this] {
             return ExcaSocketUpdates{{ {&socket_a_.Slot(), ExcaWriteEffect::SocketOff()},
                                        {&socket_b_.Slot(), ExcaWriteEffect::SocketOff()} }};

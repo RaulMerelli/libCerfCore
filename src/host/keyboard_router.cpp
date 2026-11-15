@@ -1,43 +1,44 @@
 #include <cerfcore/host/keyboard_router.h>
 
+#include "../core/deferred_jobs.h"
+
 #include <cerfcore/core/cerf_emulator.h>
 #include <cerfcore/host/keyboard_input.h>
+#include <cerfcore/host/machine_object_tree.h>
+#include <cerfcore/host/virtual_keys.h>
 
 namespace cerfcore {
 
 REGISTER_SERVICE(KeyboardRouter);
 
-void KeyboardRouter::SelectAutoLocked() {
-    KeyboardInput* best_ready = nullptr;
-    KeyboardInput* best_any   = nullptr;
-    for (auto* s : sources_) {
-        if (!best_any || s->SourcePriority() > best_any->SourcePriority())
-            best_any = s;
-        if (!s->SourceReady()) continue;
-        if (!best_ready || s->SourcePriority() > best_ready->SourcePriority())
-            best_ready = s;
-    }
-    active_ = best_ready ? best_ready : best_any;
-}
+void KeyboardRouter::OnReady() { emu_.Get<MachineObjectTree>().Add(this); }
 
-void KeyboardRouter::Register(KeyboardInput* src) {
-    std::lock_guard<std::mutex> lk(mtx_);
-    for (auto* s : sources_) if (s == src) return;
-    sources_.push_back(src);
-    if (!user_picked_) SelectAutoLocked();
-}
+void KeyboardRouter::SaveObjectState(StateWriter& w) const { SaveSelection(w); }
+
+void KeyboardRouter::RestoreObjectState(StateReader& r) { RestoreSelection(r); }
 
 void KeyboardRouter::OnHostKey(uint8_t vk, bool key_up) { Route(vk, key_up, false); }
 
 void KeyboardRouter::OnStockKey(uint8_t vk, bool key_up) { Route(vk, key_up, true); }
 
-KeyboardInput* KeyboardRouter::StockLocked() const {
-    for (auto* s : sources_)
+void KeyboardRouter::SendCtrlAltDel() {
+    OnHostKey(kVkControl, false);
+    OnHostKey(kVkMenu, false);
+    OnHostKey(kVkDelete, false);
+    OnHostKey(kVkDelete, true);
+    OnHostKey(kVkMenu, true);
+    OnHostKey(kVkControl, true);
+}
+
+KeyboardInput* KeyboardRouter::Stock() const {
+    for (KeyboardInput* s : Sources())
         if (s->Stock()) return s;
     return nullptr;
 }
 
 void KeyboardRouter::Route(uint8_t vk, bool key_up, bool stock) {
+    KeyboardInput* receiver = nullptr;
+    if (!key_up) receiver = stock ? Stock() : Active();
     KeyboardInput* target;
     KeyboardInput* released = nullptr;
     {
@@ -47,62 +48,19 @@ void KeyboardRouter::Route(uint8_t vk, bool key_up, bool stock) {
             target = owner;
             owner  = nullptr;
         } else {
-            KeyboardInput* receiver = stock ? StockLocked() : active_;
             if (owner != receiver) released = owner;
             owner  = receiver;
             target = owner;
         }
     }
-    if (released) released->OnHostKey(vk, true);
-    if (target) target->OnHostKey(vk, key_up);
+    auto& jobs = emu_.Get<DeferredJobs>();
+    if (released) jobs.PostToGuestThread([released, vk] { released->OnHostKey(vk, true); });
+    if (target) jobs.PostToGuestThread([target, vk, key_up] { target->OnHostKey(vk, key_up); });
 }
 
 bool KeyboardRouter::Held(uint8_t vk) const {
     std::lock_guard<std::mutex> lk(mtx_);
     return key_owner_[vk] != nullptr;
-}
-
-std::vector<KeyboardInput*> KeyboardRouter::Sources() {
-    std::lock_guard<std::mutex> lk(mtx_);
-    return sources_;
-}
-
-KeyboardInput* KeyboardRouter::Active() {
-    std::lock_guard<std::mutex> lk(mtx_);
-    return active_;
-}
-
-void KeyboardRouter::SetActive(KeyboardInput* src) {
-    std::lock_guard<std::mutex> lk(mtx_);
-    for (auto* s : sources_)
-        if (s == src) { active_ = src; user_picked_ = true; return; }
-}
-
-void KeyboardRouter::RestoreActiveByName(const std::string& name) {
-    std::lock_guard<std::mutex> lk(mtx_);
-    for (auto* s : sources_)
-        if (s->SourceName() == name) { active_ = s; return; }
-}
-
-void KeyboardRouter::ReevaluateAuto() {
-    std::lock_guard<std::mutex> lk(mtx_);
-    if (!user_picked_) SelectAutoLocked();
-}
-
-bool KeyboardRouter::UserPicked() const {
-    std::lock_guard<std::mutex> lk(mtx_);
-    return user_picked_;
-}
-
-void KeyboardRouter::RestoreUserPicked(bool picked) {
-    std::lock_guard<std::mutex> lk(mtx_);
-    user_picked_ = picked;
-}
-
-void KeyboardRouter::RearmAutoSelect() {
-    std::lock_guard<std::mutex> lk(mtx_);
-    user_picked_ = false;
-    SelectAutoLocked();
 }
 
 }

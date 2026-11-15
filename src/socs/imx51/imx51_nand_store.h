@@ -1,7 +1,7 @@
 #pragma once
 
 #include <cerfcore/core/service.h>
-#include <cerfcore/host/host_widget.h>
+#include <cerfcore/host/machine_storage.h>
 #include "../../storage/disk_image.h"
 
 #include <array>
@@ -11,7 +11,7 @@
 
 namespace cerfcore {
 
-class Imx51NandStore : public Service, public HostWidget {
+class Imx51NandStore : public Service, public MachineStorage {
 public:
     using Service::Service;
 
@@ -37,17 +37,17 @@ public:
     /* Total device page count (4 KB main pages), valid after OnReady. */
     uint64_t DevicePages() const { return device_pages_; }
 
-    std::string ImagePath() const;
+    std::string ImagePath() const override;
 
     /* Register an in-memory page ReadPage returns for `page_index` (raw
        main+spare), used by guest-additions IMGFS injection. */
     void SetReadOverlayPage(uint64_t page_index, const uint8_t* main,
                             const uint8_t* spare);
 
-    std::string WidgetName() const override { return "NAND Flash"; }
-    WidgetGroup Group() const override { return WidgetGroup::Storage; }
-    std::string Tooltip() const override;
-    WidgetIcon  Icon() const override { return ChipIcon{}; }
+    std::string   ObjectId() const override { return "nand_flash"; }
+    static constexpr char kObjectName[] = "NAND Flash";
+    std::string   ObjectName() const override { return kObjectName; }
+    StorageMedium Medium() const override { return StorageMedium::kNandFlash; }
 
 private:
     /* 2 GB Micron part (NFC READ ID 0x2C/0x48), 512 KB block, 4 KB page. */

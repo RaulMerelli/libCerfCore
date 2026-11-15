@@ -3,7 +3,7 @@
 #define NOMINMAX
 
 #include <cerfcore/core/service.h>
-#include "../../platform/wave_in_fifo.h"
+#include "../../host/wave_in_fifo.h"
 #include "sa11xx_audio_config.h"
 #include "sa11xx_dma_clients.h"
 

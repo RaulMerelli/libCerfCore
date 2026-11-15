@@ -2,7 +2,7 @@
 #include "askey_pc3xx_family_id.h"
 #include <cerfcore/core/cerf_emulator.h>
 #include <cerfcore/core/service.h>
-#include <cerfcore/host/host_widget_registry.h>
+#include <cerfcore/host/machine_object_tree.h>
 #include <cerfcore/socs/guest_cpu_reset.h>
 #include "../../peripherals/pcmcia/pcmcia_auto_insert.h"
 #include "../../peripherals/pcmcia/pcmcia_slot.h"
@@ -12,6 +12,9 @@
 namespace cerfcore {
 
 namespace {
+
+constexpr char kSlotId[]    = "card_slot";
+constexpr char kSlotLabel[] = "CF / PC Card slot";
 
 /* Pin map from the ROM PCMCIA PDD (pcmcia.dll status read sub_18C21A4):
    CD = GPIO10 (GPLR0 bit10, low = present), ready/nIREQ = GPIO33 (GPLR1
@@ -23,7 +26,7 @@ constexpr uint32_t kGpioReady = 33u;
 class AskeyPc3xxPcmcia : public Service, public PcmciaSlotHost {
 public:
     explicit AskeyPc3xxPcmcia(CerfEmulator& emu)
-        : Service(emu), slot_(emu, *this, "CF / PC Card slot") {}
+        : Service(emu), slot_(emu, *this, {kSlotId, kSlotLabel}) {}
 
     bool ShouldRegister() override {
         return emu_.Get<BoardContext>().GetBoardFamilyId() == BoardFamilyId::AskeyPc3xx;
@@ -31,7 +34,7 @@ public:
 
     void OnReady() override {
         emu_.Get<PcmciaSpaceRouter>().ProvideSockets(&slot_, nullptr);
-        emu_.Get<HostWidgetRegistry>().Register(&slot_);
+        emu_.Get<MachineObjectTree>().Add(&slot_);
 
         auto& gpio = emu_.Get<Pxa255Gpio>();
         gpio.SetInputLevel(kGpioCd, true);     /* empty slot: CD idles high */

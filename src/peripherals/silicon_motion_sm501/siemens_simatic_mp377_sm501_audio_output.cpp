@@ -6,7 +6,7 @@
 #include <cerfcore/core/fatal.h>
 #include <cerfcore/core/instance_threads.h>
 #include <cerfcore/core/log.h>
-#include "../../host/audio_activity_widget.h"
+#include "../../host/audio_activity.h"
 #include <cerfcore/socs/guest_cpu_reset.h>
 #include <cerfcore/state/state_stream.h>
 
@@ -20,8 +20,8 @@ bool SiemensSimaticMp377Sm501AudioOutput::ShouldRegister() {
 }
 
 void SiemensSimaticMp377Sm501AudioOutput::OnReady() {
-    widget_ = &emu_.Get<AudioActivityWidget>();
-    output_.Start(emu_.Get<Fatal>(), emu_.Get<InstanceThreads>(), "MP377SM501Audio", 0, 2, 16);
+    emu_.Get<AudioActivity>().NotePresent();
+    output_.Start(emu_.Get<Fatal>(), emu_.Get<InstanceThreads>(), emu_.TryGet<AudioOutputs>(), "MP377SM501Audio", 0, 2, 16);
     emu_.Get<GuestCpuReset>().RegisterResetListener([this](ResetLineKind) {
         if (emu_.Get<GuestCpuReset>().DeliveredResetWasResume()) return;
         ResetDevice();
@@ -46,7 +46,6 @@ void SiemensSimaticMp377Sm501AudioOutput::QueueAc97PcmSample(uint32_t left20, ui
     ++host_packet_frames_;
     if (host_packet_frames_ == kHostPacketFrames) {
         output_.QueueOutput(host_packet_.data(), kHostPacketBytes);
-        widget_->NotePresent();
         host_packet_.fill(0u);
         host_packet_frames_ = 0u;
     }
@@ -73,7 +72,6 @@ void SiemensSimaticMp377Sm501AudioOutput::SetPlaybackEnabled(bool enabled) {
         }
         output_.SetFormat(Ac97Codec::kFrameRateHz, 2, 16);
         output_.BeginAudioOut();
-        widget_->NotePresent();
     } else if (!enabled && active_.load(std::memory_order_acquire)) {
         active_.store(false, std::memory_order_release);
         {

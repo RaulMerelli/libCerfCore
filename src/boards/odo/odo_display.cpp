@@ -3,7 +3,7 @@
 #include "odo_dma_pointer_pair.h"
 
 #include <cerfcore/peripherals/peripheral_base.h>
-#include <cerfcore/host/panel_frame_renderer.h>
+#include "../../host/panel_frame_renderer.h"
 #include <cerfcore/host/host_presentation.h>
 
 #include <cerfcore/core/cerf_emulator.h>
@@ -172,14 +172,10 @@ public:
     bool HasFrame() override {
         auto& regs = emu_.Get<OdoDisplayRegs>();
         if ((regs.Csr() & kLcdOn) == 0) return false;
-        if (latch_.Latched()) return true;
         const uint32_t xs = regs.XSize();
         const uint32_t ys = regs.YSize();
         if (xs == 0 || ys == 0) return false;
-        return latch_.ProbeAndLatch(emu_.Get<EmulatedMemory>(),
-                                    emu_.Get<OdoDisplayDma>()
-                                       .GetEffectivePa(),
-                                    (size_t)(xs * ys) / 4u);
+        return true;
     }
 
     void RenderInto(uint32_t* dib_bgra32,

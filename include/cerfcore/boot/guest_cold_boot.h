@@ -25,8 +25,8 @@ public:
        lowers the DLL-RW floor on every run) shifts them when re-run. */
     void RecordPatch(uint32_t pa, uint32_t len);
 
-    /* Any thread. Arms the cold boot and triggers reset delivery. */
     void RequestHardReset();
+    void RequestHardResetFromHost();
 
     void ExecuteIfPending();
 

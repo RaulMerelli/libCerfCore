@@ -3,6 +3,7 @@
 #include "service.h"
 
 #include <cstdint>
+#include <mutex>
 #include <string>
 
 namespace cerfcore {
@@ -13,6 +14,9 @@ public:
 
     bool WriteConfigurableScreenSize(uint32_t width, uint32_t height);
     void WriteHud(const std::string& hud);
+
+private:
+    std::mutex mtx_;
 };
 
 }

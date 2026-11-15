@@ -1,7 +1,7 @@
 #include "casio_tomcat_pccard.h"
 
 #include <cerfcore/core/cerf_emulator.h>
-#include <cerfcore/host/host_widget_registry.h>
+#include <cerfcore/host/machine_object_tree.h>
 #include "../../peripherals/pcmcia/pcmcia_auto_insert.h"
 #include "../../peripherals/peripheral_dispatcher.h"
 #include <cerfcore/socs/guest_cpu_reset.h>
@@ -13,6 +13,9 @@
 namespace cerfcore {
 
 namespace {
+
+constexpr char kCfSlotId[]    = "cf_slot";
+constexpr char kCfSlotLabel[] = "CompactFlash slot";
 
 constexpr uint32_t kWindowBase = 0x1400E000u;
 constexpr uint32_t kWindowSize = 0x800u;
@@ -35,7 +38,7 @@ constexpr int kCardIreqGiuPin = 0;
 }  /* namespace */
 
 CasioTomcatPcCard::CasioTomcatPcCard(CerfEmulator& emu)
-    : Peripheral(emu), slot0_(emu, *this, "CompactFlash slot") {}
+    : Peripheral(emu), slot0_(emu, *this, {kCfSlotId, kCfSlotLabel}) {}
 
 bool CasioTomcatPcCard::ShouldRegister() {
     return emu_.Get<BoardContext>().GetBoardFamilyId() == BoardFamilyId::CasioTomcat;
@@ -43,7 +46,7 @@ bool CasioTomcatPcCard::ShouldRegister() {
 
 void CasioTomcatPcCard::OnReady() {
     emu_.Get<PeripheralDispatcher>().Register(this);
-    emu_.Get<HostWidgetRegistry>().Register(&slot0_);
+    emu_.Get<MachineObjectTree>().Add(&slot0_);
     emu_.Get<Vr41xxGiu>().SetPinLevel(kCardIreqGiuPin, true);
     emu_.Get<PcmciaAutoInsert>().InsertLaunchCompactFlash(slot0_);
     emu_.Get<GuestCpuReset>().RegisterResetListener([this](ResetLineKind) {

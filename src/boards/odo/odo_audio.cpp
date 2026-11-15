@@ -13,7 +13,7 @@
 #include <cerfcore/boards/board_context.h>
 #include "odo_family_id.h"
 #include <cerfcore/cpu/emulated_memory.h>
-#include "../../host/audio_activity_widget.h"
+#include "../../host/audio_activity.h"
 #include "../../peripherals/peripheral_dispatcher.h"
 #include "../../peripherals/philips_ucb1200/ucb1x00_codec.h"
 #include <cerfcore/socs/guest_cpu_reset.h>
@@ -111,9 +111,9 @@ void OdoAudioPlayer::OnReady() {
     event_ = clock_->Add([this] { OnPageEnd(); });
     clock_->RegisterRateListener([this] { OnRateChange(); });
     emu_.Get<GuestCpuReset>().RegisterResetListener([this](ResetLineKind) { ResetLine(); });
-    out_.Start(emu_.Get<Fatal>(), emu_.Get<InstanceThreads>(), "OdoAudio", static_cast<uint32_t>(kSampleRate), kChannels,
+    out_.Start(emu_.Get<Fatal>(), emu_.Get<InstanceThreads>(), emu_.TryGet<AudioOutputs>(), "OdoAudio", static_cast<uint32_t>(kSampleRate), kChannels,
                kBitsPerSample);
-    emu_.Get<AudioActivityWidget>().NotePresent();
+    emu_.Get<AudioActivity>().NotePresent();
 }
 
 void OdoAudioPlayer::OnShutdown() { out_.Stop(); }
@@ -192,7 +192,7 @@ void OdoAudioPlayer::QueuePage(uint32_t page, uint32_t first_sample) {
                             page * kPageBytes + offset;
     emu_.Get<EmulatedMemory>().CopyOut(pa, bytes, length);
     out_.QueueOutput(bytes, length);
-    emu_.Get<AudioActivityWidget>().MarkTx();
+    emu_.Get<AudioActivity>().MarkTx();
 }
 
 void OdoAudioPlayer::OnRateChange() {

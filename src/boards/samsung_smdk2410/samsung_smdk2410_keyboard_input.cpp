@@ -31,7 +31,8 @@ public:
         emu_.Get<KeyboardRouter>().Register(this);
     }
 
-    std::string SourceName() const override { return "DevEmu keyboard"; }
+    static constexpr char kSourceName[] = "DevEmu keyboard";
+    std::string SourceName() const override { return kSourceName; }
 
     void OnHostKey(uint8_t vk, bool key_up) override {
         auto& map = emu_.Get<KeyboardMap>();

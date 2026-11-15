@@ -9,6 +9,12 @@ namespace cerfcore {
 
 REGISTER_SERVICE(EmulationPause);
 
+namespace {
+
+constexpr char kPausedText[] = "The emulator is paused\nResume it in Actions menu";
+
+}
+
 bool EmulationPause::UserCanToggle() const {
     return !state_operation_.load(std::memory_order_acquire) &&
            emu_.Get<JitRunner>().Started();
@@ -54,8 +60,7 @@ void EmulationPause::Apply(bool user, bool state_operation) {
 void EmulationPause::ShowUserCard(bool shown) {
     auto& stack = emu_.Get<NotificationStack>();
     if (shown) {
-        stack.Show(NotificationId::EmulatorPaused, NotificationKind::Warning,
-                   "The emulator is paused\nResume it in Actions menu");
+        stack.Show(NotificationId::EmulatorPaused, NotificationKind::Warning, kPausedText);
     } else {
         stack.Close(NotificationId::EmulatorPaused);
     }

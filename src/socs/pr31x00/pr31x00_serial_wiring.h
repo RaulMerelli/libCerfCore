@@ -1,10 +1,10 @@
 #pragma once
 
 #include <cerfcore/core/service.h>
+#include <cerfcore/host/machine_object.h>
 
 #include <cstdint>
 #include <optional>
-#include <string>
 
 namespace cerfcore {
 
@@ -21,7 +21,7 @@ struct Pr31x00SerialPin {
 };
 
 struct Pr31x00SerialModem {
-    std::string      label;
+    ObjectIdentity   port;
     Pr31x00SerialPin cts, dcd, dsr, ri;   /* inputs: an endpoint drives these */
     Pr31x00SerialPin dtr, rts;            /* outputs: the guest drives these */
 };

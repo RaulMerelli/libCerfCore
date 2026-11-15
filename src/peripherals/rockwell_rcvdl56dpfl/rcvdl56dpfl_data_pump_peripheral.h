@@ -46,7 +46,8 @@ private:
     RatedTickCount          bit_ticks_{emu_};
     GuestCycleClock::Rate   bit_rate_{};
     bool                    timed_ = false;
-    PhoneLine               phone_{emu_, "Modem"};
+    static constexpr char   kPhoneLineLabel[] = "Modem";
+    PhoneLine               phone_{emu_, kPhoneLineLabel};
     Rcvdl56dpflDataPump     pump_{*this, phone_};
 };
 

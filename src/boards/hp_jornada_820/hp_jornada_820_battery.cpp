@@ -2,7 +2,7 @@
 
 #include <cerfcore/core/byte_order.h>
 #include <cerfcore/core/cerf_emulator.h>
-#include <cerfcore/host/host_widget_registry.h>
+#include <cerfcore/host/machine_object_tree.h>
 #include <cerfcore/socs/guest_cpu_reset.h>
 #include "../../socs/sa11xx/sa11xx_intc.h"
 #include "../../socs/sa11xx/sa11xx_sp1_uart.h"
@@ -53,7 +53,7 @@ void HpJornada820Battery::OnReady() {
     intc_          = &emu_.Get<Sa11xxIntc>();
     sp1_           = &emu_.Get<Sa11xxSp1Uart>();
     sp1_->AttachDevice(this);
-    emu_.Get<HostWidgetRegistry>().Register(&battery_);
+    emu_.Get<MachineObjectTree>().Add(&battery_);
     packets_.SetRate(clock_->ClockRate(), kPacketRate);
     packets_.Start(clock_->Cycles());
     ArmNextPacket();
@@ -66,7 +66,7 @@ void HpJornada820Battery::OnReady() {
 
 void HpJornada820Battery::SendPacket() {
     if ((intc_->GetIcmr() & kSp1IntcMask) == 0u) return;
-    const auto pkt = BuildPacket(battery_.FillPercent(), battery_.IsOnBattery());
+    const auto pkt = BuildPacket(battery_.ChargePercent(), battery_.OnBattery());
     sp1_->PushRxBurstNow(pkt.data(), pkt.size());
 }
 

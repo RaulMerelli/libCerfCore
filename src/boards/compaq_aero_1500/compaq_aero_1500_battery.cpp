@@ -2,7 +2,7 @@
 
 #include <cerfcore/boards/board_context.h>
 #include <cerfcore/core/cerf_emulator.h>
-#include <cerfcore/host/host_widget_registry.h>
+#include <cerfcore/host/machine_object_tree.h>
 #include <cerfcore/state/state_stream.h>
 #include "../../peripherals/nec_vrc4171a/nec_vrc4171a.h"
 #include "../../peripherals/nec_vrc4171a/nec_vrc4171a_lcd.h"
@@ -67,18 +67,18 @@ void CompaqAero1500Battery::OnReady() {
     vrc4171_ = &emu_.Get<NecVrc4171a>();
     giu_->RegisterPinDeviceState([this](StateWriter& w) { SaveState(w); },
                                  [this](StateReader& r) { RestoreState(r); });
-    battery_.SetChangeHandler([this] { DrivePins(); });
-    emu_.Get<HostWidgetRegistry>().Register(&battery_);
+    battery_.AddChangeListener([this] { DrivePins(); });
+    emu_.Get<MachineObjectTree>().Add(&battery_);
     DrivePins();
 }
 
 bool CompaqAero1500Battery::Charging() {
-    return !battery_.IsOnBattery() &&
+    return !battery_.OnBattery() &&
            giu_->OutputDrive(kChargerEnableGpio) == PinDrive::kHigh;
 }
 
 uint16_t CompaqAero1500Battery::TargetVoltageWord() {
-    const int fill = battery_.FillPercent();
+    const int fill = battery_.ChargePercent();
     return Charging() ? WordForFill(kChargeVoltage, fill) : WordForFill(kRestVoltage, fill);
 }
 
@@ -89,7 +89,7 @@ bool CompaqAero1500Battery::UnderLoad() {
 uint16_t CompaqAero1500Battery::CellVoltageWord() {
     const uint16_t target = TargetVoltageWord();
     const bool     loaded = !Charging() && UnderLoad();
-    const int      fill   = battery_.FillPercent();
+    const int      fill   = battery_.ChargePercent();
     const uint16_t sag    = loaded ? static_cast<uint16_t>(WordForFill(kRestVoltage, fill) -
                                                            WordForFill(kLoadedRestVoltage, fill))
                                    : 0u;
@@ -103,11 +103,11 @@ uint16_t CompaqAero1500Battery::CellVoltageWord() {
 }
 
 uint16_t CompaqAero1500Battery::ChargeCurrentWord() {
-    return Charging() ? WordForFill(kChargeCurrent, battery_.FillPercent()) : 0u;
+    return Charging() ? WordForFill(kChargeCurrent, battery_.ChargePercent()) : 0u;
 }
 
 void CompaqAero1500Battery::DrivePins() {
-    const bool on_battery = battery_.IsOnBattery();
+    const bool on_battery = battery_.OnBattery();
     giu_->SetPinLevel(kAcGpio, on_battery);
     giu_->SetPinLevel(kBatteryPresentGpio, false);
     giu_->SetPinLevel(kChargerPowerGpio, !on_battery);

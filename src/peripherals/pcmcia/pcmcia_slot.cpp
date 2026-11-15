@@ -1,17 +1,16 @@
 #include "pcmcia_slot.h"
 
 #include "pcmcia_card_catalog.h"
+#include "pcmcia_card_identity.h"
 
 #include <cerfcore/core/cerf_emulator.h>
 #include <cerfcore/core/fatal.h>
 #include <cerfcore/core/log.h>
 #include <cerfcore/core/product_name.h>
-#include <cerfcore/core/utf16.h>
+#include <cerfcore/state/emulation_freeze.h>
 #include <cerfcore/state/state_stream.h>
 
-#include <chrono>
-#include <thread>
-#include <type_traits>
+#include <memory>
 #include <utility>
 
 namespace cerfcore {
@@ -21,24 +20,20 @@ uint16_t PcmciaSlot::UndrivenDataWord() const {
     return static_cast<uint16_t>((lane << 8) | lane);
 }
 
-PcmciaSlot::PcmciaSlot(CerfEmulator& emu, PcmciaSlotHost& host,
-                       std::string label)
-    : emu_(emu), host_(host), label_(std::move(label)) {}
+PcmciaSlot::PcmciaSlot(CerfEmulator& emu, PcmciaSlotHost& host, ObjectIdentity identity)
+    : emu_(emu), host_(host), identity_(std::move(identity)),
+      gap_(emu, [this](std::unique_ptr<PcmciaCard> card) { SeatHeld(std::move(card)); }) {}
 
-void PcmciaSlot::PublishUiLocked() {
-    UiView view;
-    view.generation = generation_;
-    if (card_) {
-        view.has_card       = true;
-        view.icon           = card_->IconResource();
-        view.tooltip_detail = card_->TooltipDetail();
-        view.save_id        = card_->SaveId();
-        view.display_name   = card_->DisplayName();
-        for (auto& c : card_->CardControls())
-            view.card_controls.push_back(GuardControlLocked(std::move(c), generation_));
-    }
-    std::lock_guard<std::mutex> lk(ui_mtx_);
-    ui_ = std::move(view);
+void PcmciaSlot::PublishInsertedLocked() {
+    std::optional<InsertedItem> inserted = gap_.HeldItem();
+    if (card_) inserted = InsertedItem{card_->SaveId(), card_->DisplayName(), card_->Facts()};
+    std::lock_guard<std::mutex> lk(inserted_mtx_);
+    inserted_ = std::move(inserted);
+}
+
+void PcmciaSlot::Announce(bool ejected, bool inserted) {
+    if (ejected) ReportEjected();
+    if (inserted) ReportInserted();
 }
 
 void PcmciaSlot::PublishPinsLocked() {
@@ -57,7 +52,7 @@ void PcmciaSlot::SetPowered(bool on) {
         std::lock_guard<std::mutex> lk(bus_mutex_);
         if (powered_ == on) return;
         powered_ = on;
-        LOG(Pcmcia, "[Slot %s] Vcc %s\n", label_.c_str(), on ? "on" : "off");
+        LOG(Pcmcia, "[Slot %s] Vcc %s\n", identity_.name.c_str(), on ? "on" : "off");
         PublishPinsLocked();
         if (card_) {
             if (on) card_->PowerOn();
@@ -215,38 +210,55 @@ void PcmciaSlot::InsertLocked(std::unique_ptr<PcmciaCard> card) {
     card_->AttachSlot(this, generation_);
     card_->OnInserted();
     if (powered_) card_->PowerOn();
-    PublishUiLocked();
-    LOG(Pcmcia, "[Slot %s] inserted: %s\n", label_.c_str(),
+    PublishInsertedLocked();
+    LOG(Pcmcia, "[Slot %s] inserted: %s\n", identity_.name.c_str(),
         card_->DisplayName().c_str());
 }
 
 void PcmciaSlot::EjectLocked() {
-    LOG(Pcmcia, "[Slot %s] ejected: %s\n", label_.c_str(),
+    LOG(Pcmcia, "[Slot %s] ejected: %s\n", identity_.name.c_str(),
         card_->DisplayName().c_str());
     if (powered_) card_->PowerOff();
     card_.reset();
     ++generation_;
     PublishPinsLocked();
-    PublishUiLocked();
+    PublishInsertedLocked();
     DriveLine(kLineIreq | kLineBusy, false);
 }
 
 void PcmciaSlot::InsertCard(std::unique_ptr<PcmciaCard> card) {
     {
         std::lock_guard<std::mutex> lk(bus_mutex_);
+        if (shut_down_) return;
         if (card_) {
             LOG(Caution, "[Slot %s] InsertCard into occupied slot "
                     "(%s) - rejected\n",
-                label_.c_str(), card_->DisplayName().c_str());
+                identity_.name.c_str(), card_->DisplayName().c_str());
             return;
         }
         InsertLocked(std::move(card));
     }
     host_.OnCardDetectChanged(*this);
+    Announce(false, true);
+}
+
+void PcmciaSlot::SeatHeld(std::unique_ptr<PcmciaCard> card) {
+    bool changed = false;
+    {
+        std::lock_guard<std::mutex> lk(bus_mutex_);
+        if (shut_down_ || card_) return;
+        const std::optional<InsertedItem> held = Inserted();
+        InsertLocked(std::move(card));
+        changed = Inserted() != held;
+    }
+    host_.OnCardDetectChanged(*this);
+    if (changed) Changed();
 }
 
 void PcmciaSlot::OnShutdown() {
     std::lock_guard<std::mutex> lk(bus_mutex_);
+    ++generation_;
+    shut_down_ = true;
     if (card_) card_->OnShutdown();
 }
 
@@ -256,16 +268,11 @@ void PcmciaSlot::SaveSlotState(StateWriter& w) {
     w.Write<uint8_t>("reset_line", reset_asserted_ ? 1u : 0u);
     w.Write<uint8_t>("card_busy", (line_.load(std::memory_order_acquire) & kLineBusy) != 0u ? 1u : 0u);
     emu_.Get<ExternalDeviceClock>().SaveTimer(CardTimer(), w, "card_timer_");
+    gap_.Save(w);
     const bool has = (card_ != nullptr);
     w.Write<uint8_t>("has", has ? 1u : 0u);
     if (!has) return;
-    const std::string id = card_->SaveId();
-    w.Write<uint32_t>("id_count", static_cast<uint32_t>(id.size()));
-    if (!id.empty()) w.WriteBytes("id", id.data(), id.size());
-    const std::u16string binding = Utf8ToUtf16(card_->SaveBinding());
-    w.Write<uint32_t>("binding_count", static_cast<uint32_t>(binding.size()));
-    if (!binding.empty())
-        w.WriteBytes("binding", binding.data(), binding.size() * sizeof(char16_t));
+    PcmciaCardIdentity{card_->SaveId(), card_->SaveBinding()}.Save(w, "");
     w.BeginFrame(0);
     card_->SaveState(w);
     w.EndFrame();
@@ -274,46 +281,57 @@ void PcmciaSlot::SaveSlotState(StateWriter& w) {
 void PcmciaSlot::PostRestoreSlot() {
     std::lock_guard<std::mutex> lk(bus_mutex_);
     emu_.Get<ExternalDeviceClock>().ResumeTimer(CardTimer());
+    gap_.PostRestore();
     if (card_) card_->PostRestore();
 }
 
 void PcmciaSlot::RestoreSlotState(StateReader& r) {
-    std::lock_guard<std::mutex> lk(bus_mutex_);
+    bool ejected  = false;
+    bool inserted = false;
+    {
+        std::lock_guard<std::mutex> lk(bus_mutex_);
+        RestoreSlotBodyLocked(r, ejected, inserted);
+    }
+    Announce(ejected, inserted);
+}
+
+void PcmciaSlot::RestoreSlotBodyLocked(StateReader& r, bool& ejected, bool& inserted) {
+    ++generation_;
     uint8_t powered = 0, reset_line = 0, card_busy = 0, has = 0;
     r.Read("powered", powered);
     r.Read("reset_line", reset_line);
     r.Read("card_busy", card_busy);
     emu_.Get<ExternalDeviceClock>().RestoreTimer(CardTimer(), r, "card_timer_");
+    ejected = gap_.HeldItem().has_value();
+    gap_.Restore(r);
+    inserted = gap_.HeldItem().has_value();
     r.Read("has", has);
     reset_asserted_ = reset_line != 0u;
     if (!has) {
-        if (card_) EjectLocked();
+        if (card_) {
+            EjectLocked();
+            ejected = true;
+        }
         powered_ = (powered != 0);
         PublishPinsLocked();
+        PublishInsertedLocked();
         line_.store(card_busy != 0u ? kLineBusy : 0u, std::memory_order_release);
         return;
     }
-    uint32_t idlen = 0;
-    r.Read("id_count", idlen);
-    std::string id(static_cast<size_t>(idlen), '\0');
-    if (idlen) r.ReadBytes("id", &id[0], idlen);
-    uint32_t blen = 0;
-    r.Read("binding_count", blen);
-    std::u16string units(static_cast<size_t>(blen), u'\0');
-    if (blen) r.ReadBytes("binding", &units[0], blen * sizeof(char16_t));
-    const std::string binding = Utf16ToUtf8(units);
+    const PcmciaCardIdentity identity = PcmciaCardIdentity::Restore(r, "");
     if (const uint32_t frame = r.EnterFrame(); frame != 0u)
         r.Reject("PC Card body in frame 0x%X, this build writes frame 0", frame);
-    /* Resume the exact desktop: rebuild the saved card from its id + host
-       binding when the socket is empty or holds a different card, then apply
-       its register state. */
-    if (!card_ || id != card_->SaveId()) {
-        auto card = emu_.Get<PcmciaCardCatalog>().TryCreate(id, binding);
-        if (!card) r.Reject("PC Card '%s' is unknown to this build", id.c_str());
-        if (card_) EjectLocked();
+    if (!card_ || identity.id != card_->SaveId()) {
+        auto card = emu_.Get<PcmciaCardCatalog>().TryCreate(identity.id, identity.binding);
+        if (!card) r.Reject("PC Card '%s' is unknown to this build", identity.id.c_str());
+        if (card_) {
+            EjectLocked();
+            ejected = true;
+        }
         powered_ = (powered != 0);
         PublishPinsLocked();
         InsertLocked(std::move(card));
+        inserted = true;
     } else if (powered_ != (powered != 0)) {
         powered_ = (powered != 0);
         PublishPinsLocked();
@@ -323,144 +341,121 @@ void PcmciaSlot::RestoreSlotState(StateReader& r) {
     card_->RestoreState(r);
     r.LeaveFrame();
     line_.store(card_busy != 0u ? kLineBusy : 0u, std::memory_order_release);
-    PublishUiLocked();
+    PublishInsertedLocked();
 }
 
 void PcmciaSlot::EjectCardIfResident(uint64_t card_id) {
     {
         std::lock_guard<std::mutex> lk(bus_mutex_);
-        if (!card_ || card_->CardId() != card_id) return;
-        EjectLocked();
+        if (shut_down_ || !card_ || card_->CardId() != card_id) return;
+        card_->StopHostIo();
     }
-    host_.OnCardDetectChanged(*this);
+    {
+        auto frozen = emu_.Get<EmulationFreeze>().WorkerSection();
+        {
+            std::lock_guard<std::mutex> lk(bus_mutex_);
+            if (shut_down_ || !card_ || card_->CardId() != card_id) return;
+            EjectLocked();
+            gap_.Open();
+        }
+        host_.OnCardDetectChanged(*this);
+    }
+    Announce(true, false);
 }
 
-void PcmciaSlot::MenuEject(uint64_t gen) {
+void PcmciaSlot::ReportCardFailure(uint64_t card_id, const char* reason, uint32_t code) {
+    std::string subject;
     {
         std::lock_guard<std::mutex> lk(bus_mutex_);
-        if (generation_ != gen || !card_) return;
-        EjectLocked();
+        if (shut_down_ || !card_ || card_->CardId() != card_id) return;
+        subject = card_->SaveBinding();
     }
-    host_.OnCardDetectChanged(*this);
+    Failed(reason, code, std::move(subject));
+    EjectCardIfResident(card_id);
 }
 
-void PcmciaSlot::CombinedSwap(uint64_t gen, std::unique_ptr<PcmciaCard> card) {
+std::optional<uint64_t> PcmciaSlot::StopResidentHostIo() {
+    std::lock_guard<std::mutex> lk(bus_mutex_);
+    if (shut_down_) return std::nullopt;
+    if (card_) card_->StopHostIo();
+    return generation_;
+}
+
+void PcmciaSlot::Eject() {
     bool ejected = false;
-    {
-        std::lock_guard<std::mutex> lk(bus_mutex_);
-        if (generation_ != gen) return;
+    for (;;) {
+        const std::optional<uint64_t> gen = StopResidentHostIo();
+        if (!gen) return;
+        auto                         frozen = emu_.Get<EmulationFreeze>().WorkerSection();
+        std::unique_lock<std::mutex> lk(bus_mutex_);
+        if (shut_down_) return;
+        if (generation_ != *gen) continue;
+        bool pins = false;
         if (card_) {
             EjectLocked();
+            gap_.Open();
+            pins    = true;
+            ejected = true;
+        } else if (gap_.Drop()) {
+            LOG(Pcmcia, "[Slot %s] dropped the held card\n", identity_.name.c_str());
+            PublishInsertedLocked();
             ejected = true;
         }
+        lk.unlock();
+        if (pins) host_.OnCardDetectChanged(*this);
+        break;
     }
-    if (ejected) {
-        host_.OnCardDetectChanged(*this);
-        std::this_thread::sleep_for(std::chrono::milliseconds(1500));
-    }
-    {
-        std::lock_guard<std::mutex> lk(bus_mutex_);
-        if (card_) return;
-        InsertLocked(std::move(card));
-    }
-    host_.OnCardDetectChanged(*this);
+    Announce(ejected, false);
 }
 
-void PcmciaSlot::MenuInsert(uint64_t gen, const std::string& card_id) {
-    CombinedSwap(gen, emu_.Get<PcmciaCardCatalog>().Create(card_id));
-}
-
-void PcmciaSlot::MenuInsertCard(uint64_t gen, std::unique_ptr<PcmciaCard> card) {
-    if (!card) return;
-    CombinedSwap(gen, std::move(card));
-}
-
-std::vector<SlotEntry> PcmciaSlot::Available(uint64_t gen) {
-    std::vector<SlotEntry> entries;
-    for (const auto& e : emu_.Get<PcmciaCardCatalog>().Entries()) {
-        SlotEntry entry;
-        if (e.build_entry) {
-            entry = e.build_entry([this, gen](std::unique_ptr<PcmciaCard> card) {
-                MenuInsertCard(gen, std::move(card));
-            });
+void PcmciaSlot::CombinedSwap(std::unique_ptr<PcmciaCard> card) {
+    bool ejected = false;
+    for (;;) {
+        const std::optional<uint64_t> gen = StopResidentHostIo();
+        if (!gen) return;
+        auto                         frozen = emu_.Get<EmulationFreeze>().WorkerSection();
+        std::unique_lock<std::mutex> lk(bus_mutex_);
+        if (shut_down_) return;
+        if (generation_ != *gen) continue;
+        bool pins = false;
+        if (card_) {
+            EjectLocked();
+            gap_.Open();
+            pins    = true;
+            ejected = true;
+        }
+        bool              replaced = false;
+        const std::string name     = card->DisplayName();
+        if (gap_.Hold(card, replaced)) {
+            LOG(Pcmcia, "[Slot %s] held for the swap gap: %s (replaced a held card: %d)\n",
+                identity_.name.c_str(), name.c_str(), replaced ? 1 : 0);
+            PublishInsertedLocked();
+            ejected = ejected || replaced;
         } else {
-            entry.insert = [this, gen, id = e.id] { MenuInsert(gen, id); };
+            InsertLocked(std::move(card));
+            pins = true;
         }
-        entry.id    = e.id;
-        entry.label = e.display_name;
-        entries.push_back(std::move(entry));
+        lk.unlock();
+        if (pins) host_.OnCardDetectChanged(*this);
+        break;
     }
-    return entries;
+    Announce(ejected, true);
 }
 
-template <class Fn>
-Fn PcmciaSlot::GuardLocked(Fn fn, uint64_t gen) {
-    if (!fn) return fn;
-    return [this, gen, inner = std::move(fn)](auto&&... args) {
-        std::lock_guard<std::mutex> lk(bus_mutex_);
-        if (generation_ != gen) return;
-        inner(std::forward<decltype(args)>(args)...);
-    };
+std::optional<InsertedItem> PcmciaSlot::Inserted() const {
+    std::lock_guard<std::mutex> lk(inserted_mtx_);
+    return inserted_;
 }
 
-WidgetControl PcmciaSlot::GuardControlLocked(WidgetControl control, uint64_t gen) {
-    std::visit([&](auto& v) {
-        using T = std::decay_t<decltype(v)>;
-        if constexpr (std::is_same_v<T, ActionControl>) {
-            v.press = GuardLocked(std::move(v.press), gen);
-        } else if constexpr (std::is_same_v<T, ToggleControl>) {
-            v.set = GuardLocked(std::move(v.set), gen);
-        } else if constexpr (std::is_same_v<T, ChoiceControl>) {
-            v.select = GuardLocked(std::move(v.select), gen);
-        } else if constexpr (std::is_same_v<T, GroupControl>) {
-            for (auto& child : v.children) child = GuardControlLocked(std::move(child), gen);
-        } else if constexpr (std::is_same_v<T, SlotControl>) {
-            emu_.Get<Fatal>().Die("PcmciaSlot: a card exposes a nested slot control");
-        }
-    }, control.control);
-    return control;
-}
+std::vector<InsertableType> PcmciaSlot::Accepted() const { return emu_.Get<PcmciaCardCatalog>().Accepted(); }
 
-std::vector<WidgetControl> PcmciaSlot::Controls() {
-    UiView view;
-    {
-        std::lock_guard<std::mutex> lk(ui_mtx_);
-        view = ui_;
-    }
-    const uint64_t gen = view.generation;
-
-    SlotControl slot;
-    slot.id        = "slot";
-    slot.kind      = SlotKind::kPcCard;
-    slot.available = Available(gen);
-    if (view.has_card) {
-        slot.inserted          = ChoiceOption{view.save_id, view.display_name};
-        slot.eject             = [this, gen] { MenuEject(gen); };
-        slot.inserted_controls = std::move(view.card_controls);
-    }
-    return {WidgetControl{std::move(slot)}};
-}
-
-std::string PcmciaSlot::Tooltip() const {
-    std::lock_guard<std::mutex> lk(ui_mtx_);
-    if (!ui_.has_card) return label_ + " - empty";
-    return label_ + " - " + ui_.tooltip_detail;
-}
-
-WidgetIcon PcmciaSlot::Icon() const {
-    std::lock_guard<std::mutex> lk(ui_mtx_);
-    return ResourceIcon{ui_.icon};
-}
-
-bool PcmciaSlot::PollDirty() {
-    std::string res;
-    {
-        std::lock_guard<std::mutex> lk(ui_mtx_);
-        res = ui_.icon;
-    }
-    if (res == ui_last_res_) return false;
-    ui_last_res_ = std::move(res);
-    return true;
+void PcmciaSlot::InsertAccepted(const std::string& type_id, const std::string& command_id,
+                                const std::string& argument) {
+    emu_.Get<PcmciaCardCatalog>().Insert(
+        *this, type_id, command_id, argument,
+        PcmciaCardCatalog::CardInserter{
+            [this](std::unique_ptr<PcmciaCard> card) { CombinedSwap(std::move(card)); },
+            [this](const char* reason, std::string subject) { Failed(reason, 0, std::move(subject)); }});
 }
 
 }

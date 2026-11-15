@@ -3,7 +3,6 @@
 #include "../core/service.h"
 
 #include <cstdint>
-#include <string>
 
 namespace cerfcore {
 
@@ -13,15 +12,13 @@ public:
 
     virtual void PanelEnabled() = 0;
     virtual void GuestRemoded(uint32_t guest_w, uint32_t guest_h) = 0;
-    virtual void GuestTurned(uint32_t quarters) = 0;
+    virtual void FrameTurned() = 0;
+    virtual void HostModeSet(uint32_t w, uint32_t h) = 0;
+    virtual void CustomizationsReset() = 0;
 
     virtual uint32_t SurfaceWidth() const = 0;
     virtual uint32_t SurfaceHeight() const = 0;
     virtual void     RestoreSurfaceSize(uint32_t w, uint32_t h) = 0;
-    virtual void     FitGuestResolution(uint32_t w, uint32_t h) = 0;
-    virtual void     SaveScreenshot(const std::string& path) = 0;
-
-    virtual void ShowCustomizationsRestart() = 0;
 };
 
 }

@@ -42,8 +42,9 @@ private:
     static void FastWriteThunk(void* ctx, uint32_t off,
                                uint32_t value, uint32_t width_bytes) {
         auto* self = static_cast<CerfVirtFramebufferMem*>(ctx);
-        cerf::le::PutN(self->fb_->Bytes() + off, value, width_bytes);
-        self->fb_->MarkDirty();
+        uint8_t* const at = self->fb_->Bytes() + off;
+        cerf::le::PutN(at, value, width_bytes);
+        self->fb_->MarkWritten(at);
     }
 
     CerfVirtFramebuffer* fb_ = nullptr;

@@ -10,7 +10,7 @@
 #include <cerfcore/core/device_config.h>
 #include <cerfcore/core/host_file_bytes.h>
 #include <cerfcore/core/log.h>
-#include <cerfcore/host/host_widget_registry.h>
+#include <cerfcore/host/machine_object_tree.h>
 
 #include <array>
 #include <cstring>
@@ -22,10 +22,6 @@ REGISTER_SERVICE(Imx51NandStore);
 std::string Imx51NandStore::ImagePath() const {
     const DeviceConfig& cfg = emu_.Get<DeviceConfig>();
     return ResolveDeviceFile(cfg.device_name, cfg.storage_nand);
-}
-
-std::string Imx51NandStore::Tooltip() const {
-    return "NAND Flash storage (" + ImagePath() + ")";
 }
 
 bool Imx51NandStore::ShouldRegister() {
@@ -46,7 +42,7 @@ void Imx51NandStore::OnReady() {
         emu_.Get<Fatal>().Die("Imx51NandStore: cannot open '%s'", path.c_str());
     }
 
-    emu_.Get<HostWidgetRegistry>().Register(this);
+    emu_.Get<MachineObjectTree>().Add(this);
 
     if (existed) {
         LOG(SocNand, "Imx51NandStore: using existing '%s' (%llu pages)\n",

@@ -1,7 +1,7 @@
 #pragma once
 
 #include <cerfcore/core/service.h>
-#include "../../host/battery_widget.h"
+#include <cerfcore/host/battery.h>
 #include <cerfcore/core/callback_list.h>
 
 #include <cstdint>
@@ -37,7 +37,7 @@ private:
     void NotifyChange();
 
     Vr41xxGiu*    giu_ = nullptr;
-    BatteryWidget battery_;
+    Battery       battery_{emu_};
     CallbackList<> change_listeners_;
 };
 

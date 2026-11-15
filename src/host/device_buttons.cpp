@@ -2,29 +2,34 @@
 
 #include <cerfcore/core/cerf_emulator.h>
 #include <cerfcore/host/host_pointer_input_lock.h>
+#include <cerfcore/host/machine_object_tree.h>
 
 #include <utility>
 
 namespace cerfcore {
 
-std::vector<ActionControl> DeviceButtons::Actions() {
-    HostPointerInputLock*      lock    = &emu_.Get<HostPointerInputLock>();
-    std::vector<ActionControl> actions = BoardActions();
-    for (ActionControl& action : actions)
-        action.press = [lock, press = std::move(action.press)] { lock->RunUnlessHeld(press); };
-    return actions;
+void DeviceButtons::WiredButton::Press() { emu_.Get<HostPointerInputLock>().RunUnlessHeld(spec_.press); }
+
+void DeviceButtons::OnReady() {
+    auto& tree = emu_.Get<MachineObjectTree>();
+    for (ButtonSpec& spec : BoardButtons()) {
+        buttons_.push_back(std::make_unique<WiredButton>(emu_, std::move(spec)));
+        tree.Add(buttons_.back().get());
+    }
 }
 
-std::vector<ActionControl> DeviceButtons::RawTapColumn(std::span<const RawTapButton> buttons, uint16_t adc_x,
-                                                       std::function<void(uint16_t, uint16_t)> tap) const {
-    std::vector<ActionControl> out;
-    for (const RawTapButton& b : buttons) {
-        ActionControl it;
-        it.id    = b.id;
-        it.label = b.label;
-        it.press = [tap, adc_x, y = b.adc_y] { tap(adc_x, y); };
-        out.push_back(std::move(it));
-    }
+std::vector<MachineButton*> DeviceButtons::Buttons() const {
+    std::vector<MachineButton*> out;
+    for (const auto& button : buttons_) out.push_back(button.get());
+    return out;
+}
+
+std::vector<DeviceButtons::ButtonSpec> DeviceButtons::RawTapColumn(std::span<const RawTapButton> buttons,
+                                                                   uint16_t adc_x,
+                                                                   std::function<void(uint16_t, uint16_t)> tap) const {
+    std::vector<ButtonSpec> out;
+    for (const RawTapButton& b : buttons)
+        out.push_back(ButtonSpec{b.id, b.name, [tap, adc_x, y = b.adc_y] { tap(adc_x, y); }});
     return out;
 }
 

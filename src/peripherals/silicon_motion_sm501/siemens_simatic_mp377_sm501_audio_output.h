@@ -11,7 +11,6 @@
 
 namespace cerfcore {
 
-class AudioActivityWidget;
 class StateReader;
 class StateWriter;
 
@@ -41,7 +40,6 @@ private:
     void ResetDevice();
 
     PacedWaveOut output_;
-    AudioActivityWidget* widget_ = nullptr;
     std::atomic<bool> active_{false};
     std::array<uint8_t, kHostPacketBytes> host_packet_{};
     uint32_t host_packet_frames_ = 0u;

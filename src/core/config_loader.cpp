@@ -79,7 +79,7 @@ void ConfigLoader::LoadMeta(const json& root, DeviceMeta& meta, const std::strin
     }
 }
 
-void ConfigLoader::LoadBoard(const json& root, DeviceConfig& config, const std::string& path) {
+void ConfigLoader::LoadBoard(const json& root, DeviceConfig& config, LiveDeviceSettings& live, const std::string& path) {
     if (!root.contains(config_key::kBoard)) return;
     const auto& b = root[config_key::kBoard];
     if (!b.is_object())
@@ -89,7 +89,7 @@ void ConfigLoader::LoadBoard(const json& root, DeviceConfig& config, const std::
         config.board_id = Reader().ReadOptString(b, config_key::kId, path, config_key::kBoard);
 
     LoadBoardConfig(b, config, path);
-    emu_.Get<ConfigMutableFields>().LoadScreenFields(b, config, path);
+    emu_.Get<ConfigMutableFields>().LoadScreenFields(b, live, path);
 }
 
 void ConfigLoader::LoadBoardConfig(const json& board, DeviceConfig& config, const std::string& path) {
@@ -121,21 +121,22 @@ void ConfigLoader::LoadGaAutorun(const json& ga, DeviceConfig& config, const std
         Reader().ReadStringArray(list, path, CfgKeyPath({config_key::kGuestAdditions, config_key::kAutorun}));
 }
 
-void ConfigLoader::LoadFeatures(const json& root, DeviceConfig& config, const std::string& path) {
+void ConfigLoader::LoadFeatures(const json& root, DeviceConfig& config, LiveDeviceSettings& live,
+                                const std::string& path) {
     if (root.contains(config_key::kGuestAdditions)) {
         const auto& ga = root[config_key::kGuestAdditions];
         if (!ga.is_object())
             Reader().Fail(path, std::string("'") + config_key::kGuestAdditions + "' must be an object: { \"" +
                                     config_key::kEnabled + "\": true }");
         Reader().LoadOptBool(ga, config_key::kEnabled, config.guest_additions, path, config_key::kGuestAdditions);
-        emu_.Get<ConfigMutableFields>().LoadGaFields(ga, config, path);
+        emu_.Get<ConfigMutableFields>().LoadGaFields(ga, live, path);
         LoadGaAutorun(ga, config, path);
     }
     Reader().LoadOptBool(root, config_key::kFullScreen, config.start_fullscreen, path, {});
     Reader().LoadOptBool(root, config_key::kDoubleTapHelper, config.double_tap_helper, path, {});
     Reader().LoadOptBool(root, config_key::kAutomaticCalibration, config.automatic_calibration, path, {});
-    emu_.Get<ConfigMutableFields>().LoadHud(root, config, path);
-    emu_.Get<ConfigMutableFields>().LoadShaders(root, config, path);
+    emu_.Get<ConfigMutableFields>().LoadHud(root, live, path);
+    emu_.Get<ConfigMutableFields>().LoadShaders(root, live, path);
     Reader().LoadOptBool(root, config_key::kAdoptGaResolution, config.adopt_guest_additions_resolution_for_host_screen,
                          path, {});
 }
@@ -283,6 +284,7 @@ void ConfigLoader::LoadInto(DeviceConfig& config) {
         emu_.Get<Fatal>().Die("DeviceSelection named no device");
     config.device_name = device_name;
 
+    LiveDeviceSettings live;
     const std::string dev_path = GetDeviceDir(device_name) + kDeviceConfigFileName;
     json dev = Reader().ReadLoggedJsonFile(dev_path);
     if (dev.is_null()) {
@@ -290,11 +292,11 @@ void ConfigLoader::LoadInto(DeviceConfig& config) {
     } else {
         LOG(Cfg, "Loading device config: %s\n", dev_path.c_str());
         LoadMeta    (dev, config.meta, dev_path);
-        LoadBoard   (dev, config,      dev_path);
+        LoadBoard   (dev, config, live, dev_path);
         LoadNetwork (dev, config,      dev_path);
         LoadRom     (dev, config,      dev_path);
         LoadStorage (dev, config,      dev_path);
-        LoadFeatures(dev, config,      dev_path);
+        LoadFeatures(dev, config, live, dev_path);
         LoadAdditionalPackages(dev, config, dev_path);
     }
 
@@ -303,11 +305,11 @@ void ConfigLoader::LoadInto(DeviceConfig& config) {
     if (!user.is_null()) {
         LOG(Cfg, "Loading user device config: %s\n", user_path.c_str());
         LoadMeta    (user, config.meta, user_path);
-        LoadBoard   (user, config,      user_path);
+        LoadBoard   (user, config, live, user_path);
         LoadNetwork (user, config,      user_path);
         LoadRom     (user, config,      user_path);
         LoadStorage (user, config,      user_path);
-        LoadFeatures(user, config,      user_path);
+        LoadFeatures(user, config, live, user_path);
         LoadAdditionalPackages(user, config, user_path);
     }
 
@@ -324,10 +326,10 @@ void ConfigLoader::LoadInto(DeviceConfig& config) {
         } else if (strcmp(a, kArgGuestAdditions) == 0) {
             config.guest_additions = true;
         } else if (ReadCliOption(a, kArgGaColorScheme, v)) {
-            config.guest_additions_color_scheme = v;
+            live.guest_additions_color_scheme = v;
         } else if (ReadCliOption(a, kArgGaFontSize, v)) {
-            config.guest_additions_font_size     = (int32_t)atoi(v);
-            config.guest_additions_font_size_set = true;
+            live.guest_additions_font_size     = (int32_t)atoi(v);
+            live.guest_additions_font_size_set = true;
         } else if (ReadCliOption(a, kArgGaAutorun, v)) {
             if (!v[0]) Reader().Fail("(command line)", "--ga-autorun needs a guest path");
             if (!cli_autorun_seen) config.guest_additions_autorun.clear();
@@ -338,30 +340,30 @@ void ConfigLoader::LoadInto(DeviceConfig& config) {
         } else if (ReadCliOption(a, kArgScreenWidth, v)) {
             int n = atoi(v);
             if (n < 1) Reader().Fail("(command line)", "--screen-width must be >= 1");
-            config.board_configurable_screen_width = (uint32_t)n;
-            config.board_configurable_screen_explicit = true;
+            live.board_configurable_screen_width = (uint32_t)n;
+            live.board_configurable_screen_explicit = true;
             config.adopt_guest_additions_resolution_for_host_screen = false;
         } else if (ReadCliOption(a, kArgScreenHeight, v)) {
             int n = atoi(v);
             if (n < 1) Reader().Fail("(command line)", "--screen-height must be >= 1");
-            config.board_configurable_screen_height = (uint32_t)n;
-            config.board_configurable_screen_explicit = true;
+            live.board_configurable_screen_height = (uint32_t)n;
+            live.board_configurable_screen_explicit = true;
             config.adopt_guest_additions_resolution_for_host_screen = false;
         } else if (ReadCliOption(a, kArgScreenDpi, v)) {
             int n = atoi(v);
             if (n < 1) Reader().Fail("(command line)", "--screen-dpi must be >= 1");
-            config.screen_dpi = (uint32_t)n;
+            live.screen_dpi = (uint32_t)n;
         } else if (ReadCliOption(a, kArgScreenBpp, v)) {
             int n = atoi(v);
             if (n < 1) Reader().Fail("(command line)", "--screen-bpp must be >= 1");
-            if ((uint32_t)n != config.board_configurable_screen_bpp) config.guest_additions_palette.clear();
-            config.board_configurable_screen_bpp = (uint32_t)n;
+            if ((uint32_t)n != live.board_configurable_screen_bpp) live.guest_additions_palette.clear();
+            live.board_configurable_screen_bpp = (uint32_t)n;
         } else if (ReadCliOption(a, kArgScreenRefreshRate, v)) {
             int n = atoi(v);
             if (n < 1) Reader().Fail("(command line)", "--screen-refresh-rate must be >= 1");
             config.screen_refresh_rate = (uint32_t)n;
         } else if (ReadCliOption(a, kArgGaShareFolder, v)) {
-            config.share_folder = v;
+            live.share_folder = v;
         } else if (strcmp(a, kArgFullScreen) == 0) {
             config.start_fullscreen = true;
         } else if (strcmp(a, kArgNoFocus) == 0) {
@@ -383,15 +385,16 @@ void ConfigLoader::LoadInto(DeviceConfig& config) {
         }
     }
 
-    ApplyBoardPanelDefault(config);
+    ApplyBoardPanelDefault(config.board_id, live);
+    config.PublishLive(std::move(live));
 }
 
-void ConfigLoader::ApplyBoardPanelDefault(DeviceConfig& config) {
-    if (config.board_configurable_screen_explicit) return;
-    const DbBoard* board = emu_.Get<BoardDatabase>().FindBoard(config.board_id);
+void ConfigLoader::ApplyBoardPanelDefault(const std::string& board_id, LiveDeviceSettings& live) {
+    if (live.board_configurable_screen_explicit) return;
+    const DbBoard* board = emu_.Get<BoardDatabase>().FindBoard(board_id);
     if (!board || !board->lcd_panel_size) return;
-    config.board_configurable_screen_width  = board->lcd_panel_size->width;
-    config.board_configurable_screen_height = board->lcd_panel_size->height;
+    live.board_configurable_screen_width  = board->lcd_panel_size->width;
+    live.board_configurable_screen_height = board->lcd_panel_size->height;
 }
 
 }

@@ -68,16 +68,16 @@ public:
             case kFbRegMemBasePa: return fb_->MemBasePa();
             case kFbRegMemSizeTotal: return fb_->RegionBytes();
             case kFbRegPrimaryReserve: return fb_->PrimaryReserveBytes();
-            case kFbRegLogicalDpi: return emu_.Get<DeviceConfig>().screen_dpi;
+            case kFbRegLogicalDpi: return emu_.Get<DeviceConfig>().Live()->screen_dpi;
             case kFbRegRefreshRate: return GuestRefreshRate();
             case kFbRegSystemFontHeight:
-                return (uint32_t)emu_.Get<DeviceConfig>().guest_additions_font_size;
+                return (uint32_t)emu_.Get<DeviceConfig>().Live()->guest_additions_font_size;
             case kFbRegSystemFontPresent:
-                return emu_.Get<DeviceConfig>().guest_additions_font_size_set ? 1u : 0u;
+                return emu_.Get<DeviceConfig>().Live()->guest_additions_font_size_set ? 1u : 0u;
             case kFbRegClearType:
                 return ClearTypeMode();
             case kFbRegAllowUntrustedApps:
-                return emu_.Get<DeviceConfig>().guest_additions_allow_untrusted_apps ? 1u : 0u;
+                return emu_.Get<DeviceConfig>().Live()->guest_additions_allow_untrusted_apps ? 1u : 0u;
             default:
                 emu_.Get<Fatal>().Die("[CerfVirtFbRegs] read +0x%X", off);
         }
@@ -101,10 +101,9 @@ private:
     }
 
     uint32_t ClearTypeMode() const {
-        const auto& cfg = emu_.Get<DeviceConfig>();
-        if (!cfg.guest_additions_cleartype_set) return CerfVirt::kFbClearTypeDefault;
-        return cfg.guest_additions_cleartype ? CerfVirt::kFbClearTypeOn
-                                             : CerfVirt::kFbClearTypeOff;
+        const auto live = emu_.Get<DeviceConfig>().Live();
+        if (!live->guest_additions_cleartype_set) return CerfVirt::kFbClearTypeDefault;
+        return live->guest_additions_cleartype ? CerfVirt::kFbClearTypeOn : CerfVirt::kFbClearTypeOff;
     }
 
     CerfVirtFramebuffer* fb_         = nullptr;

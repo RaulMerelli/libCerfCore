@@ -1,7 +1,7 @@
 #pragma once
 
 #include <cerfcore/core/service.h>
-#include "../../host/battery_widget.h"
+#include <cerfcore/host/battery.h>
 #include "../../execution/guest_cycle_clock.h"
 #include "../../socs/rated_tick_count.h"
 #include "../../socs/uart_line_device.h"
@@ -29,7 +29,7 @@ private:
     void ArmNextPacket();
     void SendPacket();
 
-    BatteryWidget           battery_;
+    Battery                 battery_{emu_};
     GuestCycleClock*        clock_         = nullptr;
     GuestCycleClock::Event* packet_event_  = nullptr;
     Sa11xxIntc*             intc_          = nullptr;

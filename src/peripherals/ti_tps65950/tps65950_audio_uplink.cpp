@@ -6,7 +6,7 @@
 #include <cerfcore/core/cerf_emulator.h>
 #include <cerfcore/core/fatal.h>
 #include <cerfcore/core/instance_threads.h>
-#include "../../host/audio_activity_widget.h"
+#include "../../host/audio_activity.h"
 #include "tps65950_gain.h"
 #include "twl4030.h"
 
@@ -58,7 +58,7 @@ bool Tps65950AudioUplink::ShouldRegister() {
 
 void Tps65950AudioUplink::OnReady() {
     twl_ = &emu_.Get<Twl4030>();
-    mic_.Start(emu_.Get<InstanceThreads>(), "Tps65950Capture", kMicFifoBytes);
+    mic_.Start(emu_.Get<InstanceThreads>(), emu_.TryGet<AudioInputs>(), "Tps65950Capture", kMicFifoBytes);
     Refresh();
 }
 
@@ -152,7 +152,7 @@ void Tps65950AudioUplink::Advance(uint64_t frame) {
             skip -= n;
         }
     }
-    if (mic_.Take(scratch, kFrameBytes) != 0u) emu_.Get<AudioActivityWidget>().MarkRx();
+    if (mic_.Take(scratch, kFrameBytes) != 0u) emu_.Get<AudioActivity>().MarkRx();
     left_  = static_cast<int16_t>(cerf::le::U16(scratch, 0));
     right_ = static_cast<int16_t>(cerf::le::U16(scratch, 2));
     have_  = true;

@@ -10,6 +10,9 @@ namespace cerfcore {
 
 namespace {
 
+constexpr char kSerialPortId[]    = "serial_port";
+constexpr char kSerialPortLabel[] = "COM1 (serial)";
+
 constexpr uint32_t kUartA = 0x10C000B0u;
 
 class SharpMobilonHcSerialWiring : public Pr31x00SerialWiring {
@@ -23,7 +26,7 @@ public:
     std::optional<Pr31x00SerialModem> ForUart(uint32_t mmio_base) const override {
         if (mmio_base != kUartA) return std::nullopt;
         Pr31x00SerialModem m;
-        m.label = "COM1 (serial)";
+        m.port  = {kSerialPortId, kSerialPortLabel};
         m.cts   = Pr31x00SerialPin::OnIo(6);
         m.dcd   = Pr31x00SerialPin::OnIo(4);
         m.dtr   = Pr31x00SerialPin::OnMfio(12);

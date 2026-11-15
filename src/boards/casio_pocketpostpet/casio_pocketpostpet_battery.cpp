@@ -1,7 +1,7 @@
 #include "casio_pocketpostpet_battery.h"
 
 #include <cerfcore/core/cerf_emulator.h>
-#include <cerfcore/host/host_widget_registry.h>
+#include <cerfcore/host/machine_object_tree.h>
 #include "../../socs/vr41xx/vr41xx_giu.h"
 #include <cerfcore/boards/board_context.h>
 #include "casio_pocketpostpet_family_id.h"
@@ -14,8 +14,8 @@ bool CasioPocketpostpetBattery::ShouldRegister() {
 }
 
 void CasioPocketpostpetBattery::OnReady() {
-    emu_.Get<HostWidgetRegistry>().Register(&battery_);
-    battery_.SetChangeHandler([this] { DrivePowerPins(); });
+    emu_.Get<MachineObjectTree>().Add(&battery_);
+    battery_.AddChangeListener([this] { DrivePowerPins(); });
     DrivePowerPins();
 }
 
@@ -24,8 +24,8 @@ void CasioPocketpostpetBattery::OnReady() {
    bit10 = GPIO26, bit8 = GPIO24 (VR4121 UM 19.2.4). */
 void CasioPocketpostpetBattery::DrivePowerPins() {
     auto& giu = emu_.Get<Vr41xxGiu>();
-    const bool on_ac = !battery_.IsOnBattery();
-    giu.SetPinLevel(26, on_ac || battery_.FillPercent() > 0);
+    const bool on_ac = !battery_.OnBattery();
+    giu.SetPinLevel(26, on_ac || battery_.ChargePercent() > 0);
     giu.SetPinLevel(24, on_ac);
 }
 

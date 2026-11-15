@@ -17,7 +17,7 @@ public:
 
     void LoadInto(DeviceConfig& config);
 
-    void ApplyBoardPanelDefault(DeviceConfig& config);
+    void ApplyBoardPanelDefault(const std::string& board_id, LiveDeviceSettings& live);
 
 private:
     ConfigReader& Reader();
@@ -27,10 +27,11 @@ private:
     void SetMetaInt(int& field, const nlohmann::json& obj, const char* key, const std::string& path,
                     const std::string& ctx);
     void LoadMeta(const nlohmann::json& root, DeviceMeta& meta, const std::string& path);
-    void LoadBoard(const nlohmann::json& root, DeviceConfig& config, const std::string& path);
+    void LoadBoard(const nlohmann::json& root, DeviceConfig& config, LiveDeviceSettings& live, const std::string& path);
     void LoadBoardConfig(const nlohmann::json& board, DeviceConfig& config, const std::string& path);
     void LoadGaAutorun(const nlohmann::json& ga, DeviceConfig& config, const std::string& path);
-    void LoadFeatures(const nlohmann::json& root, DeviceConfig& config, const std::string& path);
+    void LoadFeatures(const nlohmann::json& root, DeviceConfig& config, LiveDeviceSettings& live,
+                      const std::string& path);
     void LoadNetwork(const nlohmann::json& root, DeviceConfig& config, const std::string& path);
     void LoadRom(const nlohmann::json& root, DeviceConfig& config, const std::string& path);
     void LoadStorage(const nlohmann::json& root, DeviceConfig& config, const std::string& path);

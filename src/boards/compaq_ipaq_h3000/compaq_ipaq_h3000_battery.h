@@ -1,9 +1,11 @@
 #pragma once
 
 #include <cerfcore/core/service.h>
-#include "../../host/battery_widget.h"
+#include <cerfcore/host/battery.h>
 
 #include <cstdint>
+#include <functional>
+#include <utility>
 
 namespace cerfcore {
 
@@ -20,13 +22,14 @@ public:
 
     bool OnAc() const;
     bool Charging() const;
+    void AddChangeListener(std::function<void()> cb) { battery_.AddChangeListener(std::move(cb)); }
 
 private:
     static bool IsCharging(bool on_ac, int fill_percent);
     bool        PcCardPowered() const;
     uint16_t    LoadSag() const;
 
-    BatteryWidget battery_;
+    Battery       battery_{emu_};
 };
 
 }

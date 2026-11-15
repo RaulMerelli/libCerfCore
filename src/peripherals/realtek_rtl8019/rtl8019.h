@@ -34,8 +34,7 @@ public:
                                        : PcmciaVoltageSense{ false, false, false };
     }
     bool HoldsReadyBusyInReset() const override { return false; }
-    std::string TooltipDetail() const override;
-    const char* IconResource() const override { return "pcmcia_enabled_ethernet"; }
+    CardFacts Facts() const override;
 
     void OnInserted() override;
     void OnShutdown() override;
@@ -57,8 +56,6 @@ public:
     void     WriteIo16(uint32_t offset, uint16_t value)      override;
     bool     Iois16   (uint32_t offset)                      override;
     bool     InputAcknowledge(uint32_t)                      override { return false; }
-
-    std::vector<WidgetControl> CardControls() override;
 
     const char* SaveId() const override {
         return supply_ == Supply::k3V3 ? kSaveId3V3 : kSaveId;

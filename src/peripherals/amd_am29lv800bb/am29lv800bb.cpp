@@ -33,7 +33,8 @@ public:
     uint32_t MmioBase() const override { return kBase; }
     uint32_t MmioSize() const override { return kSize; }
 
-    std::string Tooltip() const override { return "NOR Flash - AMD AM29LV800BB"; }
+    static constexpr char kObjectName[] = "AMD AM29LV800BB";
+    std::string ObjectName() const override { return kObjectName; }
 
 protected:
     uint32_t AutoSelectIdent() const override { return kAutoSelIdent; }

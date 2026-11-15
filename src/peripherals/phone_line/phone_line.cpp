@@ -1,7 +1,7 @@
 #include "phone_line.h"
 
 #include <cerfcore/core/cerf_emulator.h>
-#include <cerfcore/host/host_widget_registry.h>
+#include <cerfcore/host/machine_object_tree.h>
 #include <cerfcore/state/state_stream.h>
 
 #include <cmath>
@@ -24,7 +24,7 @@ void PushPair(const double (&hz)[N], std::vector<LineTone>& out) {
 }
 
 PhoneLine::PhoneLine(CerfEmulator& emu, std::string label)
-    : emu_(emu), label_(std::move(label)), far_end_(emu, "ppp:phone:" + label_) {}
+    : emu_(emu), label_(std::move(label)), far_end_(emu, "ppp:phone_line") {}
 
 void PhoneLine::SendData(const uint8_t* data, size_t n) {
     MarkTx();
@@ -37,8 +37,8 @@ std::vector<uint8_t> PhoneLine::TakeIncoming() {
     return bytes;
 }
 
-void PhoneLine::RegisterWidget() {
-    emu_.Get<HostWidgetRegistry>().Register(this);
+void PhoneLine::AddToTree() {
+    emu_.Get<MachineObjectTree>().Add(this);
 }
 
 void PhoneLine::Sync() {
@@ -156,44 +156,17 @@ void PhoneLine::RestoreLineState(StateReader& r, int64_t now_ns) {
     far_end_.RestoreCall(static_cast<PhoneLineAnswerModem::Call>(call), AnswerNs());
 }
 
-std::string PhoneLine::Tooltip() const {
-    return label_ + (Plugged() ? " - phone line plugged in" : " - phone line unplugged");
-}
-
-void PhoneLine::Toggle() {
-    plugged_.store(!Plugged(), std::memory_order_release);
+void PhoneLine::SetPlugged(bool plugged) {
+    plugged_.store(plugged, std::memory_order_release);
     wake_();
+    Changed();
 }
 
-bool PhoneLine::TryPrimaryAction() {
-    Toggle();
-    return true;
-}
-
-std::vector<WidgetControl> PhoneLine::Controls() {
-    ActionControl toggle;
-    toggle.id    = "line";
-    toggle.label = Plugged() ? "Unplug the phone line" : "Plug in the phone line";
-    toggle.press = [this] { Toggle(); };
-    return {WidgetControl{std::move(toggle)}};
-}
-
-WidgetIcon PhoneLine::Icon() const {
-    return ResourceIcon{Plugged() ? "serial_modem" : "modem_disabled"};
-}
-
-bool PhoneLine::PollDirty() {
-    const bool plugged = Plugged();
-    if (plugged == drawn_plugged_) return false;
-    drawn_plugged_ = plugged;
-    return true;
-}
-
-void PhoneLine::SaveWidgetState(StateWriter& w) const {
+void PhoneLine::SaveObjectState(StateWriter& w) const {
     w.Write<uint8_t>("plugged", Plugged() ? 1u : 0u);
 }
 
-void PhoneLine::RestoreWidgetState(StateReader& r) {
+void PhoneLine::RestoreObjectState(StateReader& r) {
     uint8_t plugged = 1u;
     r.Read("plugged", plugged);
     plugged_.store(plugged != 0u, std::memory_order_release);

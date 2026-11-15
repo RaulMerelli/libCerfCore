@@ -10,7 +10,7 @@
 #include <cerfcore/core/fatal.h>
 #include <cerfcore/core/log.h>
 #include <cerfcore/cpu/emulated_memory.h>
-#include <cerfcore/host/panel_frame_renderer.h>
+#include "../../host/panel_frame_renderer.h"
 #include <cerfcore/lcd/lcd_pixel_expand.h>
 
 #include <cstring>
@@ -59,18 +59,7 @@ public:
         h = d.valid ? d.fh : 0u;
     }
 
-    bool HasFrame() override {
-        const auto bg = ActiveDisplay();
-        if (!bg.valid) return false;
-        if (latch_.Latched()) return true;
-        auto& mem = emu_.Get<EmulatedMemory>();
-        Imx51IpuChannelDesc fg;
-        if (FgActive(fg))   /* content lives in the FG buffer; the BG plane can be empty */
-            return latch_.ProbeAndLatch(mem, fg.eba1,
-                       static_cast<size_t>(fg.fw) * 4u * fg.fh);
-        return latch_.ProbeAndLatch(mem, bg.eba,
-                   static_cast<size_t>(bg.sl) * bg.fh);
-    }
+    bool HasFrame() override { return ActiveDisplay().valid; }
 
     void RenderInto(uint32_t* dib_bgra32,
                     uint32_t  host_w,

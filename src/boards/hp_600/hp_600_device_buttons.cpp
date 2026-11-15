@@ -22,7 +22,7 @@ public:
         return emu_.Get<BoardContext>().GetBoardFamilyId() == BoardFamilyId::Hp600;
     }
 
-    std::vector<ActionControl> BoardActions() override {
+    std::vector<ButtonSpec> BoardButtons() override {
         static constexpr uint16_t                                kBezelAdcX = 989u;
         static constexpr std::array<uint16_t, kHp600BezelZones> kBezelAdcY = {183u, 389u, 595u, 801u};
         const std::array<Hp600BezelName, kHp600BezelZones>& names = emu_.Get<Hp600BezelButtons>().Names();

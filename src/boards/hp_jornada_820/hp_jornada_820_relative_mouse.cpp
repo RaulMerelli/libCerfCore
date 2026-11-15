@@ -18,7 +18,8 @@ public:
         return bd && bd->GetBoardFamilyId() == BoardFamilyId::HpJornada820;
     }
 
-    std::string SourceName() const override { return "Stock PS/2 mouse"; }
+    static constexpr char kSourceName[] = "Stock PS/2 mouse";
+    std::string SourceName() const override { return kSourceName; }
 
 private:
     void OnMouseReady() override { asic_ = &emu_.Get<HpJornada820CompanionAsic>(); }
