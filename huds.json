@@ -18,17 +18,19 @@
         "shape": "rounded"
       }
     },
+    "arrows_column": { "grow": 1.5, "column": ["arrows"] },
+    "device_emulator_call_keys": { "column": [{ "row": ["soft_left", "home"] }, "dial"] },
     "device_emulator_keys": {
       "row": [
-        { "column": [{ "row": ["soft_left", "home"] }, "dial"] },
-        { "grow": 1.5, "column": ["arrows"] },
+        "device_emulator_call_keys",
+        "arrows_column",
         { "column": [{ "row": ["app_2", "soft_right"] }, { "row": ["pocket_pc_back", "hang"] }] }
       ]
     },
     "device_emulator_smartphone_keys": {
       "row": [
-        { "column": [{ "row": ["soft_left", "home"] }, "dial"] },
-        { "grow": 1.5, "column": ["arrows"] },
+        "device_emulator_call_keys",
+        "arrows_column",
         { "column": [{ "row": ["smartphone_back", "soft_right"] }, "hang"] }
       ]
     },
@@ -52,7 +54,6 @@
         { "row": ["device_emulator_star", "key_0", "device_emulator_pound"] }
       ]
     },
-    "simpad_power": { "button": { "keys": ["VK_OFF"], "icon": "power_settings_new" } },
     "simpad_alt": { "button": { "keys": ["VK_MENU"], "label": "Alt" } },
     "simpad_navigation": {
       "dpad": {
@@ -67,7 +68,7 @@
     "simpad_keyboard": { "button": { "keys": ["VK_F1"], "icon": "picture_in_picture_alt" } },
     "simpad_keys": {
       "column": [
-        { "row": ["simpad_power", "simpad_alt"] },
+        { "row": ["jornada_power", "simpad_alt"] },
         { "grow": 2, "column": ["simpad_navigation"] },
         { "row": ["simpad_keyboard"] }
       ]
@@ -239,12 +240,23 @@
     "hp_620lx_tasks": { "button": { "keys": ["VK_F6"], "icon": "checklist" } },
     "hp_620lx_contacts": { "button": { "keys": ["VK_F7"], "icon": "contacts" } },
     "hp_620lx_fiscal": { "button": { "keys": ["VK_F8"], "icon": "calculate" } },
+    "bezel_settings": { "button": { "action": "settings", "icon": "settings" } },
     "hp_620lx_bezel": {
       "column": [
-        { "button": { "action": "settings", "icon": "settings" } },
+        "bezel_settings",
         { "button": { "action": "mail", "icon": "mail" } },
         { "button": { "action": "fax", "icon": "fax" } },
         { "button": { "action": "find", "icon": "search" } }
+      ]
+    },
+    "hp_620lx_q_row": {
+      "row": [
+        { "button": { "keys": ["VK_OEM_3"] } },
+        { "button": { "keys": ["VK_Q"] } }, { "button": { "keys": ["VK_W"] } }, { "button": { "keys": ["VK_E"] } },
+        { "button": { "keys": ["VK_R"] } }, { "button": { "keys": ["VK_T"] } }, { "button": { "keys": ["VK_Y"] } },
+        { "button": { "keys": ["VK_U"] } }, { "button": { "keys": ["VK_I"] } }, { "button": { "keys": ["VK_O"] } },
+        { "button": { "keys": ["VK_P"] } }, { "button": { "keys": ["VK_OEM_4"] } },
+        { "button": { "keys": ["VK_OEM_6"] } }, { "button": { "keys": ["VK_OEM_5"] } }
       ]
     },
     "hp_620lx_keyboard": {
@@ -265,16 +277,7 @@
             { "button": { "keys": ["VK_OEM_PLUS"] } }, "jornada_backspace"
           ]
         },
-        {
-          "row": [
-            { "button": { "keys": ["VK_OEM_3"] } },
-            { "button": { "keys": ["VK_Q"] } }, { "button": { "keys": ["VK_W"] } }, { "button": { "keys": ["VK_E"] } },
-            { "button": { "keys": ["VK_R"] } }, { "button": { "keys": ["VK_T"] } }, { "button": { "keys": ["VK_Y"] } },
-            { "button": { "keys": ["VK_U"] } }, { "button": { "keys": ["VK_I"] } }, { "button": { "keys": ["VK_O"] } },
-            { "button": { "keys": ["VK_P"] } }, { "button": { "keys": ["VK_OEM_4"] } },
-            { "button": { "keys": ["VK_OEM_6"] } }, { "button": { "keys": ["VK_OEM_5"] } }
-          ]
-        },
+        "hp_620lx_q_row",
         {
           "row": [
             { "grow": 1.2, "button": { "keys": ["VK_TAB"] } },
@@ -310,7 +313,7 @@
     "jornada_680_next": { "grow": 0.6, "button": { "keys": ["VK_MEDIA_NEXT_TRACK"], "label": "NEXT" } },
     "jornada_680_bezel": {
       "column": [
-        { "button": { "action": "settings", "icon": "settings" } },
+        "bezel_settings",
         { "button": { "action": "page_up", "icon": "keyboard_double_arrow_up" } },
         { "button": { "action": "page_down", "icon": "keyboard_double_arrow_down" } },
         { "button": { "action": "task_switch", "label": "Task Switch" } }
@@ -341,41 +344,35 @@
     },
     "jornada_bezel": {
       "column": [
-        { "button": { "action": "settings", "icon": "settings" } },
+        "bezel_settings",
         { "button": { "action": "backup", "icon": "backup" } },
         { "button": { "action": "dialer", "icon": "dialpad" } },
         { "button": { "action": "media_player", "icon": "play_circle" } }
       ]
     },
+    "side_rocker": { "grow": 3, "rocker": { "up": ["VK_UP"], "down": ["VK_DOWN"], "center": ["VK_RETURN"] } },
     "nino_rocker_keys": {
       "column": [
-        { "grow": 3, "rocker": { "up": ["VK_UP"], "down": ["VK_DOWN"], "center": ["VK_RETURN"] } },
-        { "button": { "keys": ["VK_ESCAPE"], "icon": "arrow_back" } }
+        "side_rocker",
+        "smartphone_back"
       ]
     },
     "nino_app_keys": {
       "column": [
-        { "button": { "keys": ["VK_F1"], "icon": "voicemail" } },
+        "hp_620lx_voice",
         { "button": { "keys": ["VK_F2"], "icon": "calendar_month" } },
         { "button": { "keys": ["VK_F3"], "icon": "contacts" } },
         { "button": { "keys": ["VK_F4"], "icon": "mail" } }
       ]
     },
-    "ipaq_h3000_top": {
-      "row": [
-        { "button": { "keys": ["VK_F5"], "icon": "mic" } },
-        { "button": { "keys": ["VK_OFF"], "icon": "power_settings_new" } }
-      ]
-    },
+    "pocket_pc_calendar": { "button": { "keys": ["VK_F1"], "icon": "calendar_month" } },
+    "pocket_pc_contacts": { "button": { "keys": ["VK_F2"], "icon": "contacts" } },
+    "pocket_pc_recorder": { "button": { "keys": ["VK_F5"], "icon": "mic" } },
+    "ipaq_h3000_top": { "row": ["pocket_pc_recorder", "jornada_power"] },
     "ipaq_h3000_keys": {
       "row": [
-        {
-          "column": [
-            { "button": { "keys": ["VK_F1"], "icon": "calendar_month" } },
-            { "button": { "keys": ["VK_F2"], "icon": "contacts" } }
-          ]
-        },
-        { "grow": 1.5, "column": ["arrows"] },
+        { "column": ["pocket_pc_calendar", "pocket_pc_contacts"] },
+        "arrows_column",
         {
           "column": [
             { "button": { "keys": ["VK_F3"], "label": "Q" } },
@@ -384,28 +381,59 @@
         }
       ]
     },
-    "tomcat_navigation": {
-      "dpad": {
-        "up": ["VK_UP"],
-        "down": ["VK_DOWN"],
-        "left": ["VK_LEFT"],
-        "right": ["VK_RIGHT"],
-        "center": ["VK_RETURN"],
-        "shape": "rounded"
-      }
-    },
     "tomcat_side_keys": {
       "column": [
         { "button": { "keys": ["VK_F4"], "icon": "mic" } },
-        { "button": { "keys": ["VK_ESCAPE"], "icon": "arrow_back" } }
+        "smartphone_back"
       ]
     },
     "tomcat_keys": {
       "row": [
-        { "grow": 2, "column": ["tomcat_navigation"] },
-        { "button": { "keys": ["VK_F1"], "icon": "calendar_month" } },
+        { "grow": 2, "column": ["arrows"] },
+        "pocket_pc_calendar",
         { "button": { "keys": ["VK_F2"], "icon": "apps" } },
         { "button": { "keys": ["VK_F3"], "icon": "search" } }
+      ]
+    },
+    "velo_letter_rows": {
+      "grow": 2,
+      "row": [
+        {
+          "grow": 13,
+          "column": [
+            {
+              "row": [
+                { "button": { "keys": ["VK_OEM_3"] } },
+                { "button": { "keys": ["VK_Q"] } }, { "button": { "keys": ["VK_W"] } },
+                { "button": { "keys": ["VK_E"] } }, { "button": { "keys": ["VK_R"] } },
+                { "button": { "keys": ["VK_T"] } }, { "button": { "keys": ["VK_Y"] } },
+                { "button": { "keys": ["VK_U"] } }, { "button": { "keys": ["VK_I"] } },
+                { "button": { "keys": ["VK_O"] } }, { "button": { "keys": ["VK_P"] } },
+                { "button": { "keys": ["VK_OEM_PLUS"] } }, { "button": { "keys": ["VK_OEM_5"] } }
+              ]
+            },
+            {
+              "row": [
+                { "grow": 2, "button": { "keys": ["VK_TAB"] } },
+                { "button": { "keys": ["VK_A"] } }, { "button": { "keys": ["VK_S"] } },
+                { "button": { "keys": ["VK_D"] } }, { "button": { "keys": ["VK_F"] } },
+                { "button": { "keys": ["VK_G"] } }, { "button": { "keys": ["VK_H"] } },
+                { "button": { "keys": ["VK_J"] } }, { "button": { "keys": ["VK_K"] } },
+                { "button": { "keys": ["VK_L"] } }, { "button": { "keys": ["VK_OEM_1"] } },
+                { "button": { "keys": ["VK_OEM_7"] } }
+              ]
+            }
+          ]
+        },
+        "jornada_enter"
+      ]
+    },
+    "velo_bottom_row": {
+      "row": [
+        { "button": { "keys": ["VK_CONTROL"] } }, { "button": { "keys": ["VK_LWIN"] } },
+        { "button": { "keys": ["VK_MENU"] } }, { "grow": 5.5, "button": { "keys": ["VK_SPACE"] } },
+        { "button": { "keys": ["VK_OEM_4"] } }, { "button": { "keys": ["VK_OEM_6"] } },
+        "jornada_left", "jornada_down", "jornada_right"
       ]
     },
     "velo_keyboard": {
@@ -424,42 +452,10 @@
             { "button": { "keys": ["VK_9"], "held": { "VK_MENU": { "icon": "calculate" } } } },
             { "button": { "keys": ["VK_0"], "held": { "VK_MENU": { "icon": "voicemail" } } } },
             { "button": { "keys": ["VK_OEM_MINUS"] } },
-            { "button": { "keys": ["VK_BACK"] } }
+            "jornada_backspace"
           ]
         },
-        {
-          "grow": 2,
-          "row": [
-            {
-              "grow": 13,
-              "column": [
-                {
-                  "row": [
-                    { "button": { "keys": ["VK_OEM_3"] } },
-                    { "button": { "keys": ["VK_Q"] } }, { "button": { "keys": ["VK_W"] } },
-                    { "button": { "keys": ["VK_E"] } }, { "button": { "keys": ["VK_R"] } },
-                    { "button": { "keys": ["VK_T"] } }, { "button": { "keys": ["VK_Y"] } },
-                    { "button": { "keys": ["VK_U"] } }, { "button": { "keys": ["VK_I"] } },
-                    { "button": { "keys": ["VK_O"] } }, { "button": { "keys": ["VK_P"] } },
-                    { "button": { "keys": ["VK_OEM_PLUS"] } }, { "button": { "keys": ["VK_OEM_5"] } }
-                  ]
-                },
-                {
-                  "row": [
-                    { "grow": 2, "button": { "keys": ["VK_TAB"] } },
-                    { "button": { "keys": ["VK_A"] } }, { "button": { "keys": ["VK_S"] } },
-                    { "button": { "keys": ["VK_D"] } }, { "button": { "keys": ["VK_F"] } },
-                    { "button": { "keys": ["VK_G"] } }, { "button": { "keys": ["VK_H"] } },
-                    { "button": { "keys": ["VK_J"] } }, { "button": { "keys": ["VK_K"] } },
-                    { "button": { "keys": ["VK_L"] } }, { "button": { "keys": ["VK_OEM_1"] } },
-                    { "button": { "keys": ["VK_OEM_7"] } }
-                  ]
-                }
-              ]
-            },
-            "jornada_enter"
-          ]
-        },
+        "velo_letter_rows",
         {
           "row": [
             { "grow": 1.5, "button": { "keys": ["VK_SHIFT"] } },
@@ -471,14 +467,16 @@
             "jornada_up", { "button": { "keys": ["VK_SHIFT"] } }
           ]
         },
-        {
-          "row": [
-            { "button": { "keys": ["VK_CONTROL"] } }, { "button": { "keys": ["VK_LWIN"] } },
-            { "button": { "keys": ["VK_MENU"] } }, { "grow": 5.5, "button": { "keys": ["VK_SPACE"] } },
-            { "button": { "keys": ["VK_OEM_4"] } }, { "button": { "keys": ["VK_OEM_6"] } },
-            "jornada_left", "jornada_down", "jornada_right"
-          ]
-        }
+        "velo_bottom_row"
+      ]
+    },
+    "cronos3e_number_row": {
+      "row": [
+        { "button": { "keys": ["VK_1"] } }, { "button": { "keys": ["VK_2"] } }, { "button": { "keys": ["VK_3"] } },
+        { "button": { "keys": ["VK_4"] } }, { "button": { "keys": ["VK_5"] } }, { "button": { "keys": ["VK_6"] } },
+        { "button": { "keys": ["VK_7"] } }, { "button": { "keys": ["VK_8"] } }, { "button": { "keys": ["VK_9"] } },
+        { "button": { "keys": ["VK_0"] } }, { "button": { "keys": ["VK_OEM_MINUS"] } },
+        { "button": { "keys": ["VK_OEM_PLUS"] } }, { "grow": 2, "button": { "keys": ["VK_BACK"] } }
       ]
     },
     "cronos3e_keyboard": {
@@ -494,15 +492,7 @@
             { "button": { "keys": ["VK_F11"], "icon": "mic" } }, "jornada_power"
           ]
         },
-        {
-          "row": [
-            { "button": { "keys": ["VK_1"] } }, { "button": { "keys": ["VK_2"] } }, { "button": { "keys": ["VK_3"] } },
-            { "button": { "keys": ["VK_4"] } }, { "button": { "keys": ["VK_5"] } }, { "button": { "keys": ["VK_6"] } },
-            { "button": { "keys": ["VK_7"] } }, { "button": { "keys": ["VK_8"] } }, { "button": { "keys": ["VK_9"] } },
-            { "button": { "keys": ["VK_0"] } }, { "button": { "keys": ["VK_OEM_MINUS"] } },
-            { "button": { "keys": ["VK_OEM_PLUS"] } }, { "grow": 2, "button": { "keys": ["VK_BACK"] } }
-          ]
-        },
+        "cronos3e_number_row",
         {
           "row": [
             { "button": { "keys": ["VK_TAB"] } },
@@ -571,25 +561,8 @@
             "jornada_power"
           ]
         },
-        {
-          "row": [
-            { "button": { "keys": ["VK_1"] } }, { "button": { "keys": ["VK_2"] } }, { "button": { "keys": ["VK_3"] } },
-            { "button": { "keys": ["VK_4"] } }, { "button": { "keys": ["VK_5"] } }, { "button": { "keys": ["VK_6"] } },
-            { "button": { "keys": ["VK_7"] } }, { "button": { "keys": ["VK_8"] } }, { "button": { "keys": ["VK_9"] } },
-            { "button": { "keys": ["VK_0"] } }, { "button": { "keys": ["VK_OEM_MINUS"] } },
-            { "button": { "keys": ["VK_OEM_PLUS"] } }, { "grow": 2, "button": { "keys": ["VK_BACK"] } }
-          ]
-        },
-        {
-          "row": [
-            { "button": { "keys": ["VK_OEM_3"] } },
-            { "button": { "keys": ["VK_Q"] } }, { "button": { "keys": ["VK_W"] } }, { "button": { "keys": ["VK_E"] } },
-            { "button": { "keys": ["VK_R"] } }, { "button": { "keys": ["VK_T"] } }, { "button": { "keys": ["VK_Y"] } },
-            { "button": { "keys": ["VK_U"] } }, { "button": { "keys": ["VK_I"] } }, { "button": { "keys": ["VK_O"] } },
-            { "button": { "keys": ["VK_P"] } }, { "button": { "keys": ["VK_OEM_4"] } },
-            { "button": { "keys": ["VK_OEM_6"] } }, { "button": { "keys": ["VK_OEM_5"] } }
-          ]
-        },
+        "cronos3e_number_row",
+        "hp_620lx_q_row",
         {
           "row": [
             { "grow": 1.5, "button": { "keys": ["VK_TAB"] } },
@@ -628,9 +601,7 @@
             { "button": { "keys": ["VK_F1"], "label": "W" } },
             { "button": { "keys": ["VK_F2"], "label": "X" } },
             { "button": { "keys": ["VK_F3"], "icon": "mail" } },
-            "jornada_contacts",
-            { "button": { "keys": ["VK_F5"], "icon": "calendar_month" } },
-            { "button": { "keys": ["VK_F6"], "icon": "checklist" } },
+            "jornada_contacts", "hp_620lx_calendar", "hp_620lx_tasks",
             { "button": { "keys": ["VK_F7"], "icon": "language" } }
           ]
         },
@@ -643,39 +614,7 @@
             { "grow": 2, "button": { "keys": ["VK_BACK"] } }
           ]
         },
-        {
-          "grow": 2,
-          "row": [
-            {
-              "grow": 13,
-              "column": [
-                {
-                  "row": [
-                    { "button": { "keys": ["VK_OEM_3"] } },
-                    { "button": { "keys": ["VK_Q"] } }, { "button": { "keys": ["VK_W"] } },
-                    { "button": { "keys": ["VK_E"] } }, { "button": { "keys": ["VK_R"] } },
-                    { "button": { "keys": ["VK_T"] } }, { "button": { "keys": ["VK_Y"] } },
-                    { "button": { "keys": ["VK_U"] } }, { "button": { "keys": ["VK_I"] } },
-                    { "button": { "keys": ["VK_O"] } }, { "button": { "keys": ["VK_P"] } },
-                    { "button": { "keys": ["VK_OEM_PLUS"] } }, { "button": { "keys": ["VK_OEM_5"] } }
-                  ]
-                },
-                {
-                  "row": [
-                    { "grow": 2, "button": { "keys": ["VK_TAB"] } },
-                    { "button": { "keys": ["VK_A"] } }, { "button": { "keys": ["VK_S"] } },
-                    { "button": { "keys": ["VK_D"] } }, { "button": { "keys": ["VK_F"] } },
-                    { "button": { "keys": ["VK_G"] } }, { "button": { "keys": ["VK_H"] } },
-                    { "button": { "keys": ["VK_J"] } }, { "button": { "keys": ["VK_K"] } },
-                    { "button": { "keys": ["VK_L"] } }, { "button": { "keys": ["VK_OEM_1"] } },
-                    { "button": { "keys": ["VK_OEM_7"] } }
-                  ]
-                }
-              ]
-            },
-            "jornada_enter"
-          ]
-        },
+        "velo_letter_rows",
         {
           "row": [
             { "grow": 1.5, "button": { "keys": ["VK_SHIFT"] } },
@@ -686,44 +625,27 @@
             "jornada_up", { "button": { "keys": ["VK_RSHIFT"] } }
           ]
         },
-        {
-          "row": [
-            { "button": { "keys": ["VK_CONTROL"] } }, { "button": { "keys": ["VK_LWIN"] } },
-            { "button": { "keys": ["VK_MENU"] } }, { "grow": 5.5, "button": { "keys": ["VK_SPACE"] } },
-            { "button": { "keys": ["VK_OEM_4"] } }, { "button": { "keys": ["VK_OEM_6"] } },
-            "jornada_left", "jornada_down", "jornada_right"
-          ]
-        }
+        "velo_bottom_row"
       ]
     },
     "gigabeat_keys": {
       "row": [
-        { "button": { "keys": ["VK_ESCAPE"], "icon": "arrow_back" } },
-        {
-          "grow": 2,
-          "dpad": {
-            "up": ["VK_UP"],
-            "down": ["VK_DOWN"],
-            "left": ["VK_LEFT"],
-            "right": ["VK_RIGHT"],
-            "center": ["VK_RETURN"],
-            "shape": "circle"
-          }
-        },
+        "smartphone_back",
+        { "grow": 2, "column": ["pocketpostpet_navigation"] },
         { "button": { "keys": ["VK_SPACE"], "icon": "play_pause" } }
       ]
     },
     "aero_side_keys": {
       "column": [
-        { "button": { "keys": ["VK_F5"], "icon": "mic" } },
-        { "grow": 3, "rocker": { "up": ["VK_UP"], "down": ["VK_DOWN"], "center": ["VK_RETURN"] } },
-        { "button": { "keys": ["VK_ESCAPE"], "icon": "arrow_back" } }
+        "pocket_pc_recorder",
+        "side_rocker",
+        "smartphone_back"
       ]
     },
     "aero_app_keys": {
       "row": [
-        { "button": { "keys": ["VK_F1"], "icon": "calendar_month" } },
-        { "button": { "keys": ["VK_F2"], "icon": "contacts" } },
+        "pocket_pc_calendar",
+        "pocket_pc_contacts",
         { "button": { "keys": ["VK_F3"], "icon": "checklist" } },
         { "button": { "keys": ["VK_F4"], "icon": "edit_note" } }
       ]
@@ -736,7 +658,7 @@
     },
     "pocketpostpet_keys": {
       "column": [
-        { "button": { "keys": ["VK_OFF"], "icon": "power_settings_new" } },
+        "jornada_power",
         { "grow": 3, "column": ["pocketpostpet_navigation"] },
         { "button": { "keys": ["VK_TAB"] } },
         { "button": { "keys": ["VK_ESCAPE"] } },
