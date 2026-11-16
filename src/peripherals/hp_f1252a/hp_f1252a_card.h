@@ -51,6 +51,12 @@ private:
     static constexpr uint32_t kMagicBase = 0x0C0000u;
     static constexpr uint32_t kMagicLen  = 8u;
 
+    bool InMagic(uint32_t offset, uint32_t bytes) const;
+    void RequireOutsideMagic(const char* access, uint32_t offset, uint32_t bytes);
+    bool LinearByte(uint32_t offset, uint32_t& at) const;
+    bool LinearWord(uint32_t offset, uint32_t& at) const;
+
+    [[noreturn]] void HaltMagic(const char* access, uint32_t offset);
     [[noreturn]] void HaltUnmapped(const char* space, const char* access, uint32_t offset);
 
     VgaController controller_;

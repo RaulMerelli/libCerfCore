@@ -40,6 +40,9 @@ inline constexpr uint32_t kBcr1DramTypeShift = 2u;
 inline constexpr uint32_t kDramTypeSdramArea3     = 2u;
 inline constexpr uint32_t kDramTypeSdramArea2And3 = 3u;
 
+inline constexpr uint32_t kBcr2FirstArea = 2u;
+inline constexpr uint32_t kBcr2LastArea  = 6u;
+
 inline constexpr uint16_t kBcr2Reset     = 0x3FF0u;
 inline constexpr uint16_t kWcr1Reset     = 0x3FF3u;
 inline constexpr uint16_t kWcr2Reset     = 0xFFFFu;
@@ -104,7 +107,7 @@ public:
     }
 
     uint32_t AreaBusBytes(uint32_t area) const override {
-        return 1u << (((this->StoredReg(kOffBcr2 / 2u) >> (2u * area)) & 3u) - 1u);
+        return (1u << ((this->StoredReg(kOffBcr2 / 2u) >> (2u * area)) & 3u)) >> 1;
     }
 
     void WriteHalf(uint32_t addr, uint16_t value) override {
@@ -132,8 +135,10 @@ private:
                 return "BCR1 A0BST selects a burst length that the unmodeled area 0 bus width limits";
             }
         } else if (off == kOffBcr2) {
-            for (uint32_t area = 2u; area <= 6u; ++area) {
-                if (((v >> (2u * area)) & 3u) == 0u) return "BCR2 AnSZ selects the reserved bus size 00";
+            for (uint32_t area = kBcr2FirstArea; area <= kBcr2LastArea; ++area) {
+                if (((v >> (2u * area)) & 3u) != 0u) continue;
+                if (area == kBcr2LastArea && AreaIsPcmcia(area)) continue;
+                return "BCR2 AnSZ selects the reserved bus size 00";
             }
         } else if (off == kOffMcr) {
             if (((v >> kMcrTrwlShift) & 3u) == 3u) return "MCR TRWL selects the reserved value 11";

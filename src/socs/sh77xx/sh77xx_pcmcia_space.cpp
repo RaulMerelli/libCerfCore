@@ -54,6 +54,7 @@ private:
                 PcmciaIoWidth::kSixteenBit};
         if (!bsc_->AreaIsPcmcia(c.area)) HaltUnsupportedAccess("access with BCR1 AnPCM clear", addr, value);
         const uint32_t bus_bytes = bsc_->AreaBusBytes(c.area);
+        if (bus_bytes == 0u) HaltUnsupportedAccess("PCMCIA access with BCR2 AnSZ reserved size 00", addr, value);
         if (bus_bytes == 4u) HaltUnsupportedAccess("PCMCIA access with BCR2 AnSZ longword", addr, value);
         if (bus_bytes == 1u) {
             c.width = PcmciaIoWidth::kEightBit;

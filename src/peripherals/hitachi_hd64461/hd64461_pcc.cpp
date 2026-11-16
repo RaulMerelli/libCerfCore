@@ -311,9 +311,9 @@ Hd64461Pcc::CardCycle Hd64461Pcc::DecodeCycle(uint32_t area, uint32_t offset, bo
     const bool     protect    = write && (StoredReg(base + kScr) & kScrWriteProtect) != 0u;
     CardCycle      c{slots_[ch], 0u, false, false};
     if (io) {
-        if (!IoInterfaceLocked(ch)) {
-            emu_.Get<Fatal>().Die("Hd64461Pcc: I/O cycle at offset 0x%08X to PCC%u in the IC memory card "
-                                  "interface", offset, ch);
+        if (ch != 0u) {
+            emu_.Get<Fatal>().Die("Hd64461Pcc: I/O cycle at offset 0x%08X to PCC1, which has the IC memory card "
+                                  "interface only", offset);
         }
         if (sixteen_mb && (offset >> kBlockShift) != kIoBlock) {
             emu_.Get<Fatal>().Die("Hd64461Pcc: I/O cycle at offset 0x%08X in the unused 16 MB block of PCC%u",

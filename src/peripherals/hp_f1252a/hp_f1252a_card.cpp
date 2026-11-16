@@ -13,24 +13,17 @@ namespace cerfcore {
 
 namespace {
 
-/* Minimal PC-Card CIS: enough for CE's PCMCIA bus driver to enumerate the
-   card and run the generic Detect chain (no specific PnP match -> falls
-   through to Detect\49 = hpvgaout!DetectVGA, which confirms via the 0xC0000
-   magic). Attribute memory is 8-bit aliased across even addresses (like the
-   NE2000 card), so the driver reads tuple byte n at attribute offset 2n. */
 const uint8_t kCisData[] = {
-    0x01, 0x03, 0xDC, 0x00, 0xFF,             /* CISTPL_DEVICE                */
-    0x15, 0x12, 0x04, 0x01,                   /* CISTPL_VERS_1 v4.1           */
+    0x01, 0x03, 0xDC, 0x00, 0xFF,
+    0x15, 0x12, 0x04, 0x01,
         'H', 'P', 0x00,
         'P', 'a', 'l', 'm', 't', 'o', 'p', ' ', 'V', 'G', 'A', 0x00,
         0xFF,
-    0x21, 0x02, 0xFF, 0x00,                   /* CISTPL_FUNCID: vendor-spec   */
-    0xFF, 0x00,                               /* CISTPL_END                   */
+    0x21, 0x02, 0xFF, 0x00,
+    0xFF, 0x00,
 };
 constexpr size_t kCisSize = sizeof(kCisData);
 
-/* HP identity magic in ATTRIBUTE memory at card offset 0xC0000, checked by
-   DetectVGA (sub_10006C70): even bytes 0/2/4/6 = 0x55,0x40,0x61,0x34. */
 const uint8_t kMagic[8] = { 0x55, 0x00, 0x40, 0x00, 0x61, 0x00, 0x34, 0x00 };
 
 struct DetectProbeReadRange {
@@ -96,7 +89,7 @@ bool IsDetectProbeWrite(uint32_t offset, uint8_t value) {
     return false;
 }
 
-}  /* namespace */
+}
 
 HpF1252aCard::HpF1252aCard(CerfEmulator& emu) : PcmciaCard(emu), controller_(emu) {}
 HpF1252aCard::~HpF1252aCard() { DetachDisplay(); }
@@ -141,9 +134,30 @@ void HpF1252aCard::SyncDisplayToMode() {
     LOG(Lcd, "[HpVga] mode %ux%u %ubpp\n", w, h, bpp);
 }
 
+bool HpF1252aCard::InMagic(uint32_t offset, uint32_t bytes) const {
+    return offset + bytes > kMagicBase && offset < kMagicBase + kMagicLen;
+}
+
+void HpF1252aCard::HaltMagic(const char* access, uint32_t offset) {
+    emu_.Get<Fatal>().Die("HpF1252aCard: common %s at 0x%06X of the identity bytes, which answer only an even "
+                          "byte read outside the linear window", access, offset);
+}
+
+void HpF1252aCard::RequireOutsideMagic(const char* access, uint32_t offset, uint32_t bytes) {
+    if (InMagic(offset, bytes)) HaltMagic(access, offset);
+}
+
+bool HpF1252aCard::LinearByte(uint32_t offset, uint32_t& at) const {
+    return offset >= kRegEnd && controller_.LinearOffset(offset, at);
+}
+
+bool HpF1252aCard::LinearWord(uint32_t offset, uint32_t& at) const {
+    return LinearByte(offset, at) && at + 1u < VgaController::kVramBytes;
+}
+
 uint8_t HpF1252aCard::ReadAttribute8(uint32_t offset) {
     if (offset < kCisSize * 2u) return kCisData[offset / 2u];
-    if (offset - kMagicBase < kMagicLen) return kMagic[offset - kMagicBase];
+    if (InMagic(offset, 1u)) return kMagic[offset - kMagicBase];
     HaltUnmapped("attribute", "read", offset);
 }
 
@@ -157,41 +171,52 @@ void HpF1252aCard::HaltUnmapped(const char* space, const char* access, uint32_t 
 }
 
 uint8_t HpF1252aCard::ReadCommon8(uint32_t offset) {
-    if (offset < kRegEnd) {
-        if (IsDetectProbeRead(offset)) return slot_->UndrivenDataLane();
-        return controller_.ReadReg8(offset);
-    }
+    if (!InMagic(offset, 1u)) return ReadIo8(offset);
     uint32_t at = 0u;
-    if (controller_.LinearOffset(offset, at)) return controller_.Vram()[at];
-    if (IsDetectProbeRead(offset)) return slot_->UndrivenDataLane();
-    HaltUnmapped("common", "read", offset);
+    if (((offset - kMagicBase) & 1u) != 0u || LinearByte(offset, at)) HaltMagic("read", offset);
+    return kMagic[offset - kMagicBase];
+}
+
+uint16_t HpF1252aCard::ReadCommon16(uint32_t offset) {
+    RequireOutsideMagic("16-bit read", offset, 2u);
+    return ReadIo16(offset);
 }
 
 void HpF1252aCard::WriteCommon8(uint32_t offset, uint8_t value) {
-    if (offset < kRegEnd) {
-        if (IsDetectProbeWrite(offset, value)) return;
-        controller_.WriteReg8(offset, value);
-        SyncDisplayToMode();
-        return;
-    }
+    RequireOutsideMagic("write", offset, 1u);
+    WriteIo8(offset, value);
+}
+
+void HpF1252aCard::WriteCommon16(uint32_t offset, uint16_t value) {
+    RequireOutsideMagic("16-bit write", offset, 2u);
+    WriteIo16(offset, value);
+}
+
+uint8_t HpF1252aCard::ReadIo8(uint32_t offset) {
     uint32_t at = 0u;
-    if (controller_.LinearOffset(offset, at)) {
+    if (LinearByte(offset, at)) return controller_.Vram()[at];
+    if (IsDetectProbeRead(offset)) return slot_->UndrivenDataLane();
+    if (offset < kRegEnd) return controller_.ReadReg8(offset);
+    HaltUnmapped("common", "read", offset);
+}
+
+void HpF1252aCard::WriteIo8(uint32_t offset, uint8_t value) {
+    uint32_t at = 0u;
+    if (LinearByte(offset, at)) {
         controller_.Vram()[at] = value;
         return;
     }
     if (IsDetectProbeWrite(offset, value)) return;
-    HaltUnmapped("common", "write", offset);
+    if (offset >= kRegEnd) HaltUnmapped("common", "write", offset);
+    controller_.WriteReg8(offset, value);
+    SyncDisplayToMode();
 }
 
-uint16_t HpF1252aCard::ReadCommon16(uint32_t offset) {
+uint16_t HpF1252aCard::ReadIo16(uint32_t offset) {
     uint32_t at = 0u;
-    if (offset >= kRegEnd && controller_.LinearOffset(offset, at) &&
-        at + 1u < VgaController::kVramBytes) {
-        return cerf::le::U16(controller_.Vram(), at);
-    }
-    const uint16_t even = ReadCommon8(offset);
-    const uint16_t odd = ReadCommon8(offset + 1u);
-    return static_cast<uint16_t>(even | (odd << 8));
+    if (LinearWord(offset, at)) return cerf::le::U16(controller_.Vram(), at);
+    const uint8_t bytes[2] = {ReadIo8(offset), ReadIo8(offset + 1u)};
+    return cerf::le::U16(bytes);
 }
 
 void HpF1252aCard::SaveState(StateWriter& w) {
@@ -205,20 +230,16 @@ void HpF1252aCard::RestoreState(StateReader& r) {
     SyncDisplayToMode();
 }
 
-void HpF1252aCard::WriteCommon16(uint32_t offset, uint16_t value) {
+void HpF1252aCard::WriteIo16(uint32_t offset, uint16_t value) {
     uint32_t at = 0u;
-    if (offset >= kRegEnd && controller_.LinearOffset(offset, at) &&
-        at + 1u < VgaController::kVramBytes) {
+    if (LinearWord(offset, at)) {
         cerf::le::Put16(controller_.Vram() + at, value);
         return;
     }
-    WriteCommon8(offset, (uint8_t)(value & 0xFFu));
-    WriteCommon8(offset + 1u, (uint8_t)(value >> 8));
+    uint8_t bytes[2];
+    cerf::le::Put16(bytes, value);
+    WriteIo8(offset, bytes[0]);
+    WriteIo8(offset + 1u, bytes[1]);
 }
-
-uint8_t  HpF1252aCard::ReadIo8(uint32_t o)             { return ReadCommon8(o);  }
-uint16_t HpF1252aCard::ReadIo16(uint32_t o)             { return ReadCommon16(o); }
-void     HpF1252aCard::WriteIo8 (uint32_t o, uint8_t v)  { WriteCommon8(o, v);  }
-void     HpF1252aCard::WriteIo16(uint32_t o, uint16_t v) { WriteCommon16(o, v); }
 
 }
