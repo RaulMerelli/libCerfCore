@@ -21,6 +21,7 @@ public:
     void OnReady() override;
 
     void SetKey(uint32_t cell, bool down);
+    void SetColumnPull(uint16_t columns_low);
     void TrackRows(const Sh77xxPortData& ports);
 
 private:
@@ -30,6 +31,7 @@ private:
     Sh77xxIntc* intc_            = nullptr;
     uint16_t    sense_columns_   = 0u;
     uint16_t    pressed_[kRows]  = {};
+    uint16_t    pulled_low_      = 0u;
     uint8_t     rows_low_        = 0u;
 };
 

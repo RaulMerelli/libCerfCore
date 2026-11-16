@@ -59,6 +59,12 @@ void Hp600KeyMatrix::SetKey(uint32_t cell, bool down) {
     PublishLocked();
 }
 
+void Hp600KeyMatrix::SetColumnPull(uint16_t columns_low) {
+    std::lock_guard<std::mutex> lk(mtx_);
+    pulled_low_ = columns_low;
+    PublishLocked();
+}
+
 void Hp600KeyMatrix::TrackRows(const Sh77xxPortData& ports) {
     uint8_t rows_low = 0u;
     for (uint32_t row = 0; row < kRows; ++row) {
@@ -72,7 +78,7 @@ void Hp600KeyMatrix::TrackRows(const Sh77xxPortData& ports) {
 }
 
 void Hp600KeyMatrix::PublishLocked() {
-    uint16_t low = 0u;
+    uint16_t low = pulled_low_;
     for (uint32_t row = 0; row < kRows; ++row) {
         if (((rows_low_ >> row) & 1u) != 0u) low = static_cast<uint16_t>(low | pressed_[row]);
     }

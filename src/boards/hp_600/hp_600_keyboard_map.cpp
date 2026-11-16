@@ -3,6 +3,7 @@
 #include <cerfcore/host/keyboard_map.h>
 #include "../jornada/jornada_keyboard_layers.h"
 #include "hp_600_family_id.h"
+#include "hp_600_input_nets.h"
 #include "hp_600_keyboard_layout.h"
 
 #include <cstdint>
@@ -40,6 +41,18 @@ constexpr jornada_kbd::LayerKey kContrastLayer[] = {
     {0xBEu, "Contrast +"},
 };
 
+struct ButtonKey {
+    Hp600InputNet net;
+    uint8_t       vk;
+    const char*   label;
+};
+
+constexpr ButtonKey kButtonKeys[] = {
+    {Hp600InputNet::kPlayButtonUp, 0xB0u, "Play Next"},
+    {Hp600InputNet::kRewindButtonUp, 0xB1u, "Play Previous"},
+    {Hp600InputNet::kRecordButtonUp, 0x7Bu, "Record"},
+};
+
 class Hp600KeyboardMap : public KeyboardMap {
 public:
     using KeyboardMap::KeyboardMap;
@@ -66,6 +79,11 @@ public:
             for (const Hp600HostAlias& a : layout.HostAliases()) {
                 if (a.guest_vk == vk) bindings_.push_back({a.host_vk, cell, a.label, 0u, 0u});
             }
+        }
+        const Hp600InputNets& nets = emu_.Get<Hp600InputNets>();
+        for (const ButtonKey& k : kButtonKeys) {
+            if (!nets.Wired(k.net)) continue;
+            bindings_.push_back({k.vk, kHp600InputNetCodeBase + static_cast<uint32_t>(k.net), k.label, 0u, 0u});
         }
         for (const jornada_kbd::LayerKey& k : jornada_kbd::kAltLayer) AddLayerLabel(k, kAltLayerId);
         for (const jornada_kbd::LayerKey& k : kContrastLayer) AddLayerLabel(k, kAltLayerId);

@@ -4,6 +4,7 @@
 #include <cerfcore/host/keyboard_map.h>
 #include <cerfcore/host/keyboard_router.h>
 #include "hp_600_family_id.h"
+#include "hp_600_input_nets.h"
 #include "hp_600_key_matrix.h"
 
 #include <cstdint>
@@ -23,18 +24,24 @@ public:
     void OnReady() override {
         map_    = &emu_.Get<KeyboardMap>();
         matrix_ = &emu_.Get<Hp600KeyMatrix>();
+        nets_   = &emu_.Get<Hp600InputNets>();
         emu_.Get<KeyboardRouter>().Register(this);
     }
 
     void OnHostKey(uint8_t vk, bool key_up) override {
-        uint32_t cell = 0u;
-        if (!map_->BaseDeviceCode(vk, cell)) return;
-        matrix_->SetKey(cell, !key_up);
+        uint32_t code = 0u;
+        if (!map_->BaseDeviceCode(vk, code)) return;
+        if (code >= kHp600InputNetCodeBase) {
+            nets_->Drive(static_cast<Hp600InputNet>(code - kHp600InputNetCodeBase), key_up);
+            return;
+        }
+        matrix_->SetKey(code, !key_up);
     }
 
 private:
     KeyboardMap*    map_    = nullptr;
     Hp600KeyMatrix* matrix_ = nullptr;
+    Hp600InputNets* nets_   = nullptr;
 };
 
 }

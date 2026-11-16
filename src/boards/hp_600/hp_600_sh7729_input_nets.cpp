@@ -22,9 +22,11 @@ public:
 protected:
     std::span<const Landing, kNetCount> Landings() const override { return kLandings; }
     uint8_t UndrivenInputs(uint32_t port) const override { return port == kSh77xxPortSc ? kPortScIrq5Pin : uint8_t{0u}; }
+    uint16_t ButtonSummaryColumns() const override { return kPortC7SummaryColumn; }
 
 private:
-    static constexpr uint8_t kPortScIrq5Pin = 0x80u;
+    static constexpr uint8_t  kPortScIrq5Pin       = 0x80u;
+    static constexpr uint16_t kPortC7SummaryColumn = 0x8000u;
 
     static constexpr Landing kLandings[] = {
         {Landing::Kind::kPortPin, Sh77xxIntcPin::kIrq0, kSh77xxPortJ, 0x10u},

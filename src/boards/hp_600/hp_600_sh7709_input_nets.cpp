@@ -22,6 +22,7 @@ public:
 protected:
     std::span<const Landing, kNetCount> Landings() const override { return kLandings; }
     uint8_t UndrivenInputs(uint32_t) const override { return 0u; }
+    uint16_t ButtonSummaryColumns() const override { return 0u; }
 
 private:
     static constexpr Landing kLandings[] = {

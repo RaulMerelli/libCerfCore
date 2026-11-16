@@ -3,14 +3,18 @@
 #include <cerfcore/core/callback_list.h>
 #include <cerfcore/core/service.h>
 #include "../../socs/sh77xx/sh77xx_intc.h"
+#include "hp_600_keyboard_layout.h"
 
 #include <array>
 #include <atomic>
 #include <cstdint>
 #include <functional>
+#include <mutex>
 #include <span>
 
 namespace cerfcore {
+
+class Hp600KeyMatrix;
 
 enum class Hp600InputNet : uint8_t {
     kAcAdapterOff,
@@ -22,6 +26,8 @@ enum class Hp600InputNet : uint8_t {
     kCount,
 };
 
+inline constexpr uint32_t kHp600InputNetCodeBase = kHp600KeyCells;
+
 class Hp600InputNets : public Service {
 public:
     using Service::Service;
@@ -30,6 +36,7 @@ public:
 
     void    Drive(Hp600InputNet net, bool high);
     void    AddNetListener(Hp600InputNet net, std::function<void()> fn);
+    bool    Wired(Hp600InputNet net) const;
     uint8_t WiredInputs(uint32_t port) const;
     uint8_t NetLevels(uint32_t port, uint8_t nets) const;
 
@@ -46,9 +53,15 @@ protected:
 
     virtual std::span<const Landing, kNetCount> Landings() const = 0;
     virtual uint8_t UndrivenInputs(uint32_t port) const = 0;
+    virtual uint16_t ButtonSummaryColumns() const = 0;
 
 private:
-    Sh77xxIntc*                            intc_ = nullptr;
+    uint32_t Apply(Hp600InputNet net, bool high);
+    void     ReleaseButtons();
+
+    Sh77xxIntc*                            intc_   = nullptr;
+    Hp600KeyMatrix*                        matrix_ = nullptr;
+    std::mutex                             buttons_mtx_;
     std::atomic<uint32_t>                  high_{(1u << kNetCount) - 1u};
     std::array<CallbackList<>, kNetCount>  listeners_;
 };
