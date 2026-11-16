@@ -83,11 +83,14 @@
     "jornada_quick_view": { "button": { "keys": ["VK_F7"], "icon": "image" } },
     "jornada_quick_pad": { "button": { "keys": ["VK_F8"], "icon": "library_books" } },
     "jornada_access": { "button": { "keys": ["VK_F9"], "icon": "edit_note" } },
-    "jornada_excel": { "button": { "keys": ["VK_F10"], "label": "X" } },
-    "jornada_word": { "button": { "keys": ["VK_F11"], "label": "W" } },
+    "jornada_excel": { "button": { "keys": ["VK_F10"], "icon": "sheets" } },
+    "jornada_word": { "button": { "keys": ["VK_F11"], "icon": "docs" } },
     "jornada_power": { "button": { "keys": ["VK_OFF"], "icon": "power_settings_new" } },
-    "jornada_backspace": { "button": { "keys": ["VK_BACK"] } },
-    "jornada_enter": { "button": { "keys": ["VK_RETURN"] } },
+    "jornada_backspace": { "button": { "keys": ["VK_BACK"], "icon": "keyboard_backspace" } },
+    "jornada_enter": { "button": { "keys": ["VK_RETURN"], "icon": "keyboard_return" } },
+    "tab_key": { "button": { "keys": ["VK_TAB"], "icon": "keyboard_tab" } },
+    "shift_key": { "button": { "keys": ["VK_SHIFT"], "icon": "shift" } },
+    "right_shift_key": { "button": { "keys": ["VK_RSHIFT"], "icon": "shift" } },
     "jornada_up": {
       "button": { "keys": ["VK_UP"], "icon": "arrow_upward", "held": { "VK_MENU": { "icon": "keyboard_double_arrow_up" } } }
     },
@@ -127,7 +130,7 @@
             },
             {
               "row": [
-                { "button": { "keys": ["VK_TAB"] } },
+                "tab_key",
                 { "button": { "keys": ["VK_A"] } }, { "button": { "keys": ["VK_S"] } },
                 { "button": { "keys": ["VK_D"] } }, { "button": { "keys": ["VK_F"] } },
                 { "button": { "keys": ["VK_G"] } }, { "button": { "keys": ["VK_H"] } },
@@ -143,11 +146,11 @@
     },
     "jornada_shift_row": {
       "row": [
-        { "grow": 2, "button": { "keys": ["VK_SHIFT"] } },
+        { "grow": 2, "column": ["shift_key"] },
         { "button": { "keys": ["VK_Z"] } }, { "button": { "keys": ["VK_X"] } }, { "button": { "keys": ["VK_C"] } },
         { "button": { "keys": ["VK_V"] } }, { "button": { "keys": ["VK_B"] } }, { "button": { "keys": ["VK_N"] } },
         { "button": { "keys": ["VK_M"] } }, { "button": { "keys": ["VK_OEM_COMMA"] } },
-        { "button": { "keys": ["VK_OEM_PERIOD"] } }, "jornada_up", { "button": { "keys": ["VK_SHIFT"] } }
+        { "button": { "keys": ["VK_OEM_PERIOD"] } }, "jornada_up", "shift_key"
       ]
     },
     "jornada_keyboard": {
@@ -175,9 +178,9 @@
     "jornada_820_inbox": { "button": { "keys": ["VK_F1"], "icon": "mail" } },
     "jornada_820_internet": { "button": { "keys": ["VK_F2"], "icon": "language" } },
     "jornada_820_calendar": { "button": { "keys": ["VK_F3"], "icon": "calendar_month" } },
-    "jornada_820_word": { "button": { "keys": ["VK_F6"], "label": "W" } },
-    "jornada_820_excel": { "button": { "keys": ["VK_F7"], "label": "X" } },
-    "jornada_820_powerpoint": { "button": { "keys": ["VK_F8"], "label": "P" } },
+    "jornada_820_word": { "button": { "keys": ["VK_F6"], "icon": "docs" } },
+    "jornada_820_excel": { "button": { "keys": ["VK_F7"], "icon": "sheets" } },
+    "jornada_820_powerpoint": { "button": { "keys": ["VK_F8"], "icon": "slides" } },
     "jornada_820_viewer": { "button": { "keys": ["VK_F9"], "icon": "image" } },
     "jornada_820_recorder": { "button": { "keys": ["VK_F10"], "icon": "voicemail" } },
     "jornada_820_settings": { "button": { "keys": ["VK_F11"], "icon": "settings" } },
@@ -203,7 +206,7 @@
         },
         {
           "row": [
-            { "button": { "keys": ["VK_TAB"] } },
+            "tab_key",
             { "button": { "keys": ["VK_A"] } }, { "button": { "keys": ["VK_S"] } }, { "button": { "keys": ["VK_D"] } },
             { "button": { "keys": ["VK_F"] } }, { "button": { "keys": ["VK_G"] } }, { "button": { "keys": ["VK_H"] } },
             { "button": { "keys": ["VK_J"] } }, { "button": { "keys": ["VK_K"] } }, { "button": { "keys": ["VK_L"] } },
@@ -212,12 +215,12 @@
         },
         {
           "row": [
-            { "grow": 1.5, "button": { "keys": ["VK_SHIFT"] } },
+            { "grow": 1.5, "column": ["shift_key"] },
             { "button": { "keys": ["VK_Z"] } }, { "button": { "keys": ["VK_X"] } }, { "button": { "keys": ["VK_C"] } },
             { "button": { "keys": ["VK_V"] } }, { "button": { "keys": ["VK_B"] } }, { "button": { "keys": ["VK_N"] } },
             { "button": { "keys": ["VK_M"] } }, { "button": { "keys": ["VK_OEM_COMMA"] } },
             { "button": { "keys": ["VK_OEM_PERIOD"] } }, { "button": { "keys": ["VK_OEM_2"] } },
-            "jornada_up", { "button": { "keys": ["VK_SHIFT"] } }
+            "jornada_up", "shift_key"
           ]
         },
         {
@@ -233,9 +236,9 @@
     },
     "hp_620lx_rec": { "button": { "keys": ["VK_F10"], "label": "REC" } },
     "hp_620lx_voice": { "button": { "keys": ["VK_F1"], "icon": "voicemail" } },
-    "hp_620lx_powerpoint": { "button": { "keys": ["VK_F2"], "icon": "image" } },
-    "hp_620lx_word": { "button": { "keys": ["VK_F3"], "label": "W" } },
-    "hp_620lx_excel": { "button": { "keys": ["VK_F4"], "label": "X" } },
+    "hp_620lx_powerpoint": { "button": { "keys": ["VK_F2"], "icon": "slides" } },
+    "hp_620lx_word": { "button": { "keys": ["VK_F3"], "icon": "docs" } },
+    "hp_620lx_excel": { "button": { "keys": ["VK_F4"], "icon": "sheets" } },
     "hp_620lx_calendar": { "button": { "keys": ["VK_F5"], "icon": "calendar_month" } },
     "hp_620lx_tasks": { "button": { "keys": ["VK_F6"], "icon": "checklist" } },
     "hp_620lx_contacts": { "button": { "keys": ["VK_F7"], "icon": "contacts" } },
@@ -280,7 +283,7 @@
         "hp_620lx_q_row",
         {
           "row": [
-            { "grow": 1.2, "button": { "keys": ["VK_TAB"] } },
+            { "grow": 1.2, "column": ["tab_key"] },
             { "button": { "keys": ["VK_A"] } }, { "button": { "keys": ["VK_S"] } }, { "button": { "keys": ["VK_D"] } },
             { "button": { "keys": ["VK_F"] } }, { "button": { "keys": ["VK_G"] } }, { "button": { "keys": ["VK_H"] } },
             { "button": { "keys": ["VK_J"] } }, { "button": { "keys": ["VK_K"] } }, { "button": { "keys": ["VK_L"] } },
@@ -290,12 +293,12 @@
         },
         {
           "row": [
-            { "grow": 2, "button": { "keys": ["VK_SHIFT"] } },
+            { "grow": 2, "column": ["shift_key"] },
             { "button": { "keys": ["VK_Z"] } }, { "button": { "keys": ["VK_X"] } }, { "button": { "keys": ["VK_C"] } },
             { "button": { "keys": ["VK_V"] } }, { "button": { "keys": ["VK_B"] } }, { "button": { "keys": ["VK_N"] } },
             { "button": { "keys": ["VK_M"] } }, { "button": { "keys": ["VK_OEM_COMMA"] } },
             { "button": { "keys": ["VK_OEM_PERIOD"] } }, { "button": { "keys": ["VK_OEM_2"] } },
-            "jornada_up", { "button": { "keys": ["VK_SHIFT"] } }
+            "jornada_up", "shift_key"
           ]
         },
         {
@@ -308,15 +311,19 @@
         }
       ]
     },
-    "jornada_680_record": { "grow": 0.6, "button": { "keys": ["VK_F12"], "label": "REC" } },
-    "jornada_680_previous": { "grow": 0.6, "button": { "keys": ["VK_MEDIA_PREV_TRACK"], "label": "PREV" } },
-    "jornada_680_next": { "grow": 0.6, "button": { "keys": ["VK_MEDIA_NEXT_TRACK"], "label": "NEXT" } },
+    "jornada_680_audio": {
+      "column": [
+        { "button": { "keys": ["VK_MEDIA_PREV_TRACK"], "icon": "skip_previous_fill" } },
+        { "button": { "keys": ["VK_MEDIA_NEXT_TRACK"], "icon": "play_arrow_fill" } },
+        { "button": { "keys": ["VK_F12"], "icon": "fiber_manual_record_fill" } }
+      ]
+    },
     "jornada_680_bezel": {
       "column": [
         "bezel_settings",
         { "button": { "action": "page_up", "icon": "keyboard_double_arrow_up" } },
         { "button": { "action": "page_down", "icon": "keyboard_double_arrow_down" } },
-        { "button": { "action": "task_switch", "label": "Task Switch" } }
+        { "button": { "action": "task_switch", "icon": "select_window" } }
       ]
     },
     "jornada_680_keyboard": {
@@ -335,8 +342,7 @@
           "row": [
             { "button": { "keys": ["VK_CONTROL"] } }, { "button": { "keys": ["VK_LWIN"] } },
             { "button": { "keys": ["VK_MENU"] } }, { "button": { "keys": ["VK_RMENU"], "label": "Fn" } },
-            "jornada_680_previous", "jornada_680_next", "jornada_680_record",
-            { "grow": 2.2, "button": { "keys": ["VK_SPACE"] } }, { "button": { "keys": ["VK_OEM_2"] } },
+            { "grow": 4, "button": { "keys": ["VK_SPACE"] } }, { "button": { "keys": ["VK_OEM_2"] } },
             { "button": { "keys": ["VK_DELETE"] } }, "jornada_left", "jornada_down", "jornada_right"
           ]
         }
@@ -414,7 +420,7 @@
             },
             {
               "row": [
-                { "grow": 2, "button": { "keys": ["VK_TAB"] } },
+                { "grow": 2, "column": ["tab_key"] },
                 { "button": { "keys": ["VK_A"] } }, { "button": { "keys": ["VK_S"] } },
                 { "button": { "keys": ["VK_D"] } }, { "button": { "keys": ["VK_F"] } },
                 { "button": { "keys": ["VK_G"] } }, { "button": { "keys": ["VK_H"] } },
@@ -441,8 +447,8 @@
         {
           "row": [
             { "button": { "keys": ["VK_ESCAPE"] } },
-            { "button": { "keys": ["VK_1"], "held": { "VK_MENU": { "label": "W" } } } },
-            { "button": { "keys": ["VK_2"], "held": { "VK_MENU": { "label": "X" } } } },
+            { "button": { "keys": ["VK_1"], "held": { "VK_MENU": { "icon": "docs" } } } },
+            { "button": { "keys": ["VK_2"], "held": { "VK_MENU": { "icon": "sheets" } } } },
             { "button": { "keys": ["VK_3"], "held": { "VK_MENU": { "icon": "calendar_month" } } } },
             { "button": { "keys": ["VK_4"], "held": { "VK_MENU": { "icon": "contacts" } } } },
             { "button": { "keys": ["VK_5"], "held": { "VK_MENU": { "icon": "checklist" } } } },
@@ -458,13 +464,13 @@
         "velo_letter_rows",
         {
           "row": [
-            { "grow": 1.5, "button": { "keys": ["VK_SHIFT"] } },
+            { "grow": 1.5, "column": ["shift_key"] },
             { "button": { "keys": ["VK_Z"] } }, { "button": { "keys": ["VK_X"] } }, { "button": { "keys": ["VK_C"] } },
             { "button": { "keys": ["VK_V"] } }, { "button": { "keys": ["VK_B"] } }, { "button": { "keys": ["VK_N"] } },
             { "button": { "keys": ["VK_M"] } }, { "button": { "keys": ["VK_OEM_COMMA"] } },
             { "button": { "keys": ["VK_OEM_PERIOD"] } },
             { "button": { "keys": ["VK_OEM_2"], "held": { "VK_MENU": { "icon": "first_page" } } } },
-            "jornada_up", { "button": { "keys": ["VK_SHIFT"] } }
+            "jornada_up", "shift_key"
           ]
         },
         "velo_bottom_row"
@@ -476,7 +482,7 @@
         { "button": { "keys": ["VK_4"] } }, { "button": { "keys": ["VK_5"] } }, { "button": { "keys": ["VK_6"] } },
         { "button": { "keys": ["VK_7"] } }, { "button": { "keys": ["VK_8"] } }, { "button": { "keys": ["VK_9"] } },
         { "button": { "keys": ["VK_0"] } }, { "button": { "keys": ["VK_OEM_MINUS"] } },
-        { "button": { "keys": ["VK_OEM_PLUS"] } }, { "grow": 2, "button": { "keys": ["VK_BACK"] } }
+        { "button": { "keys": ["VK_OEM_PLUS"] } }, { "grow": 2, "column": ["jornada_backspace"] }
       ]
     },
     "cronos3e_keyboard": {
@@ -495,7 +501,7 @@
         "cronos3e_number_row",
         {
           "row": [
-            { "button": { "keys": ["VK_TAB"] } },
+            "tab_key",
             { "button": { "keys": ["VK_Q"] } }, { "button": { "keys": ["VK_W"] } }, { "button": { "keys": ["VK_E"] } },
             { "button": { "keys": ["VK_R"] } }, { "button": { "keys": ["VK_T"] } }, { "button": { "keys": ["VK_Y"] } },
             { "button": { "keys": ["VK_U"] } }, { "button": { "keys": ["VK_I"] } }, { "button": { "keys": ["VK_O"] } },
@@ -510,17 +516,17 @@
             { "button": { "keys": ["VK_F"] } }, { "button": { "keys": ["VK_G"] } }, { "button": { "keys": ["VK_H"] } },
             { "button": { "keys": ["VK_J"] } }, { "button": { "keys": ["VK_K"] } }, { "button": { "keys": ["VK_L"] } },
             { "button": { "keys": ["VK_OEM_1"] } }, { "button": { "keys": ["VK_OEM_7"] } },
-            { "grow": 1.5, "button": { "keys": ["VK_RETURN"] } }
+            { "grow": 1.5, "column": ["jornada_enter"] }
           ]
         },
         {
           "row": [
-            { "grow": 2, "button": { "keys": ["VK_SHIFT"] } },
+            { "grow": 2, "column": ["shift_key"] },
             { "button": { "keys": ["VK_Z"] } }, { "button": { "keys": ["VK_X"] } }, { "button": { "keys": ["VK_C"] } },
             { "button": { "keys": ["VK_V"] } }, { "button": { "keys": ["VK_B"] } }, { "button": { "keys": ["VK_N"] } },
             { "button": { "keys": ["VK_M"] } }, { "button": { "keys": ["VK_OEM_COMMA"] } },
             { "button": { "keys": ["VK_OEM_PERIOD"] } }, { "button": { "keys": ["VK_OEM_2"] } },
-            { "grow": 2, "button": { "keys": ["VK_SHIFT"] } }
+            { "grow": 2, "column": ["shift_key"] }
           ]
         },
         {
@@ -541,8 +547,8 @@
             {},
             { "sticker": { "icon": "mail" } }, { "sticker": { "icon": "language" } },
             { "sticker": { "icon": "calendar_month" } }, { "sticker": { "icon": "contacts" } },
-            { "sticker": { "icon": "checklist" } }, { "sticker": { "label": "W" } },
-            { "sticker": { "label": "X" } }, { "sticker": { "label": "P" } },
+            { "sticker": { "icon": "checklist" } }, { "sticker": { "icon": "docs" } },
+            { "sticker": { "icon": "sheets" } }, { "sticker": { "icon": "slides" } },
             { "sticker": { "icon": "database" } }, { "sticker": { "icon": "calculate" } },
             { "sticker": { "icon": "voicemail" } }, { "sticker": { "icon": "apps" } },
             {}, {}, {}
@@ -565,22 +571,22 @@
         "hp_620lx_q_row",
         {
           "row": [
-            { "grow": 1.5, "button": { "keys": ["VK_TAB"] } },
+            { "grow": 1.5, "column": ["tab_key"] },
             { "button": { "keys": ["VK_A"] } }, { "button": { "keys": ["VK_S"] } }, { "button": { "keys": ["VK_D"] } },
             { "button": { "keys": ["VK_F"] } }, { "button": { "keys": ["VK_G"] } }, { "button": { "keys": ["VK_H"] } },
             { "button": { "keys": ["VK_J"] } }, { "button": { "keys": ["VK_K"] } }, { "button": { "keys": ["VK_L"] } },
             { "button": { "keys": ["VK_OEM_1"] } }, { "button": { "keys": ["VK_OEM_7"] } },
-            { "grow": 1.5, "button": { "keys": ["VK_RETURN"] } }
+            { "grow": 1.5, "column": ["jornada_enter"] }
           ]
         },
         {
           "row": [
-            { "grow": 2, "button": { "keys": ["VK_SHIFT"] } },
+            { "grow": 2, "column": ["shift_key"] },
             { "button": { "keys": ["VK_Z"] } }, { "button": { "keys": ["VK_X"] } }, { "button": { "keys": ["VK_C"] } },
             { "button": { "keys": ["VK_V"] } }, { "button": { "keys": ["VK_B"] } }, { "button": { "keys": ["VK_N"] } },
             { "button": { "keys": ["VK_M"] } }, { "button": { "keys": ["VK_OEM_COMMA"] } },
             { "button": { "keys": ["VK_OEM_PERIOD"] } }, { "button": { "keys": ["VK_OEM_2"] } },
-            "jornada_up", { "button": { "keys": ["VK_RSHIFT"], "label": "Shift" } }
+            "jornada_up", "right_shift_key"
           ]
         },
         {
@@ -598,8 +604,8 @@
         {
           "row": [
             { "button": { "keys": ["VK_ESCAPE"] } },
-            { "button": { "keys": ["VK_F1"], "label": "W" } },
-            { "button": { "keys": ["VK_F2"], "label": "X" } },
+            { "button": { "keys": ["VK_F1"], "icon": "docs" } },
+            { "button": { "keys": ["VK_F2"], "icon": "sheets" } },
             { "button": { "keys": ["VK_F3"], "icon": "mail" } },
             "jornada_contacts", "hp_620lx_calendar", "hp_620lx_tasks",
             { "button": { "keys": ["VK_F7"], "icon": "language" } }
@@ -611,18 +617,18 @@
             { "button": { "keys": ["VK_4"] } }, { "button": { "keys": ["VK_5"] } }, { "button": { "keys": ["VK_6"] } },
             { "button": { "keys": ["VK_7"] } }, { "button": { "keys": ["VK_8"] } }, { "button": { "keys": ["VK_9"] } },
             { "button": { "keys": ["VK_0"] } }, { "button": { "keys": ["VK_OEM_MINUS"] } },
-            { "grow": 2, "button": { "keys": ["VK_BACK"] } }
+            { "grow": 2, "column": ["jornada_backspace"] }
           ]
         },
         "velo_letter_rows",
         {
           "row": [
-            { "grow": 1.5, "button": { "keys": ["VK_SHIFT"] } },
+            { "grow": 1.5, "column": ["shift_key"] },
             { "button": { "keys": ["VK_Z"] } }, { "button": { "keys": ["VK_X"] } }, { "button": { "keys": ["VK_C"] } },
             { "button": { "keys": ["VK_V"] } }, { "button": { "keys": ["VK_B"] } }, { "button": { "keys": ["VK_N"] } },
             { "button": { "keys": ["VK_M"] } }, { "button": { "keys": ["VK_OEM_COMMA"] } },
             { "button": { "keys": ["VK_OEM_PERIOD"] } }, { "button": { "keys": ["VK_OEM_2"] } },
-            "jornada_up", { "button": { "keys": ["VK_RSHIFT"] } }
+            "jornada_up", "right_shift_key"
           ]
         },
         "velo_bottom_row"
@@ -660,7 +666,7 @@
       "column": [
         "jornada_power",
         { "grow": 3, "column": ["pocketpostpet_navigation"] },
-        { "button": { "keys": ["VK_TAB"] } },
+        "tab_key",
         { "button": { "keys": ["VK_ESCAPE"] } },
         { "button": { "keys": ["VK_F10"] } }
       ]
@@ -741,6 +747,7 @@
       "board_family_ids": ["hp_600"],
       "gap": 0.01,
       "panels": [
+        { "side": "left", "align": "center", "width": 0.25, "height": 0.75, "content": "jornada_680_audio" },
         { "side": "right", "align": "center", "width": 0.25, "height": 1.0, "content": "jornada_680_bezel" },
         { "side": "bottom", "align": "center", "width": 1.0, "height": 0.42, "content": "jornada_680_keyboard" }
       ]
